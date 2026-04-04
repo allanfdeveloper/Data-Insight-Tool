@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "SME Alternative Data Assessment"
+version = "1.0.0"
+id = "artifacts/sme-assessment"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18290
+
+[services.development]
+run = "pnpm --filter @workspace/sme-assessment run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sme-assessment", "run", "build" ]
+publicDir = "artifacts/sme-assessment/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18290"
+BASE_PATH = "/"
