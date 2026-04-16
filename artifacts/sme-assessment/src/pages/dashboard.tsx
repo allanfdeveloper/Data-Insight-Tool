@@ -77,14 +77,13 @@ export default function DashboardPage() {
 
   const handleUpload = () => {
     if (!selectedFile) {
-      toast({ title: "No file selected", description: "Please select an .xlsx file first.", variant: "destructive" });
+      toast({ title: "No file selected", description: "Please select a .xlsx, .xls, or .csv file first.", variant: "destructive" });
       return;
     }
-    const formData = new FormData();
-    formData.append("file", selectedFile);
 
+    // The generated hook builds FormData internally — just pass the File object
     uploadMutation.mutate(
-      { data: formData as any },
+      { data: { file: selectedFile } },
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListAssessmentsQueryKey() });
@@ -94,7 +93,12 @@ export default function DashboardPage() {
           toast({ title: "Assessment complete", description: "Your file has been processed successfully." });
         },
         onError: (err: any) => {
-          const msg = err?.response?.data?.error ?? "Failed to process file.";
+          // ApiError exposes the parsed response body on .data
+          const msg =
+            err?.data?.error ??
+            err?.data?.message ??
+            err?.message ??
+            "Failed to process file. Please try again.";
           toast({ title: "Upload failed", description: msg, variant: "destructive" });
         },
       }
@@ -164,13 +168,13 @@ export default function DashboardPage() {
       <div className="bg-card border border-card-border rounded-xl p-5 mb-8">
         <h2 className="text-sm font-semibold text-foreground mb-4">Upload Bank Statement</h2>
         <p className="text-xs text-muted-foreground mb-4">
-          Upload an Excel (.xlsx) file with columns: Date, Description, Type (Inflow/Outflow), Amount
+          Upload an Excel (.xlsx, .xls) or CSV file with columns: Date, Description, Type (Inflow/Outflow), Amount
         </p>
         <div className="flex items-center gap-3 flex-wrap">
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx"
+            accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
             onChange={handleFileChange}
             className="hidden"
             id="file-upload"
@@ -183,7 +187,7 @@ export default function DashboardPage() {
             data-testid="button-select-file"
           >
             <FileSpreadsheet className="h-4 w-4 mr-2" />
-            {selectedFile ? selectedFile.name : "Select .xlsx file"}
+            {selectedFile ? selectedFile.name : "Select file (.xlsx, .csv)"}
           </Button>
           <Button
             size="sm"
