@@ -113,9 +113,9 @@ export default function AssessmentDetailPage() {
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">
-                  {assessment.status === "PASS" && "Inflow exceeds outflow with strong transaction volume"}
-                  {assessment.status === "REVIEW" && "Moderate transaction volume — manual review recommended"}
-                  {assessment.status === "FAIL" && "Outflow exceeds inflow — financial risk identified"}
+                  {assessment.status === "PASS" && "Net positive cashflow with sufficient transaction history"}
+                  {assessment.status === "REVIEW" && "Net positive cashflow but limited transaction history — manual review recommended"}
+                  {assessment.status === "FAIL" && "Total outflows equal or exceed total inflows — financial risk identified"}
                 </p>
               </div>
             </div>
