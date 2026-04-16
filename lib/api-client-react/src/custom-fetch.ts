@@ -360,7 +360,9 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Always include credentials (cookies) so session cookies are sent/received
+  // on every request. Without this, cookie-based auth never works in browsers.
+  const response = await fetch(input, { ...init, method, headers, credentials: "include" });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
