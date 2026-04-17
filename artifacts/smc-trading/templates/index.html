@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SMC Trading Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#00d4aa',
+            dark: '#0d1117',
+            surface: '#161b22',
+            card: '#21262d',
+            border: '#30363d',
+            muted: '#8b949e',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-dark min-h-screen text-white font-sans">
+
+  <!-- Header -->
+  <header class="border-b border-border bg-surface">
+    <div class="max-w-3xl mx-auto px-4 py-5 flex items-center gap-3">
+      <div class="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-dark font-bold text-sm">S</div>
+      <div>
+        <h1 class="text-lg font-bold tracking-wide text-white">SMC Trading Assistant</h1>
+        <p class="text-xs text-muted">Smart Money Concepts · Discipline Enforcer</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="max-w-3xl mx-auto px-4 py-8">
+
+    {% if error %}
+    <div class="mb-6 bg-red-900/40 border border-red-700 text-red-300 rounded-lg px-4 py-3 text-sm">
+      ⚠ {{ error }}
+    </div>
+    {% endif %}
+
+    <div class="bg-card border border-border rounded-xl p-6 mb-6">
+      <h2 class="text-base font-semibold text-white mb-1">Setup Checklist</h2>
+      <p class="text-sm text-muted mb-6">Complete all fields to assess your trade setup against SMC rules.</p>
+
+      <form action="/assess" method="POST" class="space-y-5">
+
+        <!-- D1 Trend -->
+        <div>
+          <label class="block text-sm font-medium text-white mb-1">
+            D1 Trend
+            <span class="text-muted font-normal ml-1 text-xs">(+3 for Clear)</span>
+          </label>
+          <select name="d1_trend" required
+            class="w-full bg-surface border border-border text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent appearance-none cursor-pointer">
+            <option value="" disabled selected>Select trend direction</option>
+            <option value="clear">Clear Trend</option>
+            <option value="unclear">Unclear</option>
+          </select>
+        </div>
+
+        <!-- Liquidity Sweep -->
+        <div>
+          <label class="block text-sm font-medium text-white mb-1">
+            Liquidity Sweep
+            <span class="text-muted font-normal ml-1 text-xs">(Strong +3 / Weak +1 / None +0)</span>
+          </label>
+          <select name="liquidity_sweep" required
+            class="w-full bg-surface border border-border text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent appearance-none cursor-pointer">
+            <option value="" disabled selected>Select sweep quality</option>
+            <option value="strong">Strong (momentum + close beyond liquidity)</option>
+            <option value="weak">Weak</option>
+            <option value="none">None</option>
+          </select>
+        </div>
+
+        <!-- BOS Confirmed -->
+        <div>
+          <label class="block text-sm font-medium text-white mb-1">
+            BOS Confirmed
+            <span class="text-muted font-normal ml-1 text-xs">(+2 for Yes)</span>
+          </label>
+          <select name="bos_confirmed" required
+            class="w-full bg-surface border border-border text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent appearance-none cursor-pointer">
+            <option value="" disabled selected>Candle close confirms BOS?</option>
+            <option value="yes">Yes — candle closed beyond structure</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+
+        <!-- Valid Order Block -->
+        <div>
+          <label class="block text-sm font-medium text-white mb-1">
+            Valid Order Block
+            <span class="text-muted font-normal ml-1 text-xs">(+2 for Yes)</span>
+          </label>
+          <select name="valid_order_block" required
+            class="w-full bg-surface border border-border text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent appearance-none cursor-pointer">
+            <option value="" disabled selected>Is there a fresh, valid OB?</option>
+            <option value="yes">Yes — fresh and unmitigated</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+
+        <!-- FVG Confluence -->
+        <div>
+          <label class="block text-sm font-medium text-white mb-1">
+            FVG Confluence
+            <span class="text-muted font-normal ml-1 text-xs">(+1 for Yes)</span>
+          </label>
+          <select name="fvg_confluence" required
+            class="w-full bg-surface border border-border text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent appearance-none cursor-pointer">
+            <option value="" disabled selected>FVG aligns with OB / entry zone?</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+
+        <!-- Session Alignment -->
+        <div>
+          <label class="block text-sm font-medium text-white mb-1">
+            Session (London / NY)
+            <span class="text-muted font-normal ml-1 text-xs">(+1 for Yes)</span>
+          </label>
+          <select name="session_alignment" required
+            class="w-full bg-surface border border-border text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent appearance-none cursor-pointer">
+            <option value="" disabled selected>Are you in London or NY session?</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+
+        <!-- LTF Confirmation -->
+        <div>
+          <label class="block text-sm font-medium text-white mb-1">
+            LTF Confirmation (15m)
+            <span class="text-muted font-normal ml-1 text-xs">(+2 for Yes)</span>
+          </label>
+          <select name="ltf_confirmation" required
+            class="w-full bg-surface border border-border text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent appearance-none cursor-pointer">
+            <option value="" disabled selected>15m confirms entry structure?</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+
+        <div class="pt-2">
+          <button type="submit"
+            class="w-full bg-brand hover:bg-brand/80 text-dark font-semibold text-sm rounded-lg py-3 transition-colors duration-150 cursor-pointer">
+            Assess Setup →
+          </button>
+        </div>
+
+      </form>
+    </div>
+
+    <!-- Score guide -->
+    <div class="bg-card border border-border rounded-xl p-5">
+      <h3 class="text-sm font-semibold text-white mb-3">Scoring Guide</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div class="bg-green-900/30 border border-green-700/50 rounded-lg p-3">
+          <p class="text-green-400 font-semibold mb-1">Elite Setup · 10–14</p>
+          <p class="text-muted">Execute instantly or place pending order.</p>
+        </div>
+        <div class="bg-yellow-900/30 border border-yellow-700/50 rounded-lg p-3">
+          <p class="text-yellow-400 font-semibold mb-1">Tradable Setup · 7–9</p>
+          <p class="text-muted">Proceed with caution. Not ideal.</p>
+        </div>
+        <div class="bg-red-900/30 border border-red-700/50 rounded-lg p-3">
+          <p class="text-red-400 font-semibold mb-1">Avoid · Below 7</p>
+          <p class="text-muted">No trade. Wait for better conditions.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="text-center text-xs text-muted py-6">
+    SMC Trading Assistant — For educational &amp; discipline purposes only.
+  </footer>
+
+</body>
+</html>
