@@ -20,6 +20,7 @@ import type {
   AdminStats,
   AdminUserRecord,
   Assessment,
+  AssessmentDetail,
   AssessmentSummary,
   AuthCredentials,
   AuthResponse,
@@ -507,7 +508,7 @@ export function useListAssessments<
 }
 
 /**
- * @summary Upload an Excel file for assessment
+ * @summary Upload an Excel or CSV file for assessment
  */
 export const getUploadAssessmentUrl = () => {
   return `/api/assessments/upload`;
@@ -516,11 +517,11 @@ export const getUploadAssessmentUrl = () => {
 export const uploadAssessment = async (
   uploadAssessmentBody: UploadAssessmentBody,
   options?: RequestInit,
-): Promise<Assessment> => {
+): Promise<AssessmentDetail> => {
   const formData = new FormData();
   formData.append(`file`, uploadAssessmentBody.file);
 
-  return customFetch<Assessment>(getUploadAssessmentUrl(), {
+  return customFetch<AssessmentDetail>(getUploadAssessmentUrl(), {
     ...options,
     method: "POST",
     body: formData,
@@ -572,7 +573,7 @@ export type UploadAssessmentMutationBody = BodyType<UploadAssessmentBody>;
 export type UploadAssessmentMutationError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Upload an Excel file for assessment
+ * @summary Upload an Excel or CSV file for assessment
  */
 export const useUploadAssessment = <
   TError = ErrorType<ErrorResponse>,
@@ -604,8 +605,8 @@ export const getGetAssessmentUrl = (id: number) => {
 export const getAssessment = async (
   id: number,
   options?: RequestInit,
-): Promise<Assessment> => {
-  return customFetch<Assessment>(getGetAssessmentUrl(id), {
+): Promise<AssessmentDetail> => {
+  return customFetch<AssessmentDetail>(getGetAssessmentUrl(id), {
     ...options,
     method: "GET",
   });

@@ -6,15 +6,21 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./activityLevelFactor";
 export * from "./adminStats";
 export * from "./adminUserRecord";
 export * from "./assessment";
+export * from "./assessmentDetail";
 export * from "./assessmentStatus";
 export * from "./assessmentSummary";
 export * from "./authCredentials";
 export * from "./authResponse";
+export * from "./cashflowStrengthFactor";
+export * from "./consistencyFactor";
 export * from "./errorResponse";
 export * from "./healthStatus";
 export * from "./messageResponse";
+export * from "./scorecard";
+export * from "./scorecardFactor";
 export * from "./uploadAssessmentBody";
 export * from "./userProfile";

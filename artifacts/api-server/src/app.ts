@@ -50,7 +50,7 @@ app.use(
     store: new PgSession({
       pool,
       tableName: "session",
-      createTableIfMissing: false, // table created by migration
+      createTableIfMissing: true, // auto-create if it doesn't exist
     }),
     secret: process.env.SESSION_SECRET ?? "sme-assessment-secret-key",
     resave: false,

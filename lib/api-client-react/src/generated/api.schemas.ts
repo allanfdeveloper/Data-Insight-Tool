@@ -35,6 +35,47 @@ export interface AuthResponse {
   message: string;
 }
 
+export interface ScorecardFactor {
+  /** Points earned for this factor */
+  score: number;
+  /** Maximum possible points for this factor */
+  maxScore: number;
+  /** Human-readable classification label */
+  label: string;
+}
+
+export type CashflowStrengthFactor = ScorecardFactor & {
+  /** (totalInflow - totalOutflow) / totalInflow */
+  netRatio: number;
+  netCashflow: number;
+};
+
+export type ActivityLevelFactor = ScorecardFactor & {
+  transactionCount: number;
+};
+
+export type ConsistencyFactor = ScorecardFactor & {
+  /** Coefficient of variation of monthly inflows (null if < 2 months data) */
+  cv?: number | null;
+  /** Number of calendar months with inflow transactions */
+  monthCount: number;
+};
+
+/**
+ * Multi-factor credit assessment scorecard
+ */
+export interface Scorecard {
+  cashflowStrength: CashflowStrengthFactor;
+  activityLevel: ActivityLevelFactor;
+  consistency: ConsistencyFactor;
+  /** Weighted total score (0–100) */
+  totalScore: number;
+  /** Maximum possible total score (always 100) */
+  maxScore: number;
+  /** Plain-English explanation of the final decision */
+  statusReason: string;
+}
+
 export type AssessmentStatus =
   (typeof AssessmentStatus)[keyof typeof AssessmentStatus];
 
@@ -54,6 +95,10 @@ export interface Assessment {
   status: AssessmentStatus;
   createdAt: string;
 }
+
+export type AssessmentDetail = Assessment & {
+  scorecard?: Scorecard;
+};
 
 export interface AssessmentSummary {
   totalAssessments: number;

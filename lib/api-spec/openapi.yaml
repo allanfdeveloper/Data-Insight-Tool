@@ -144,7 +144,7 @@ paths:
     post:
       operationId: uploadAssessment
       tags: [assessments]
-      summary: Upload an Excel file for assessment
+      summary: Upload an Excel or CSV file for assessment
       requestBody:
         required: true
         content:
@@ -163,7 +163,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Assessment"
+                $ref: "#/components/schemas/AssessmentDetail"
         "400":
           description: Invalid file
           content:
@@ -190,11 +190,11 @@ paths:
             type: integer
       responses:
         "200":
-          description: Assessment details
+          description: Assessment details with scorecard
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Assessment"
+                $ref: "#/components/schemas/AssessmentDetail"
         "404":
           description: Not found
           content:
@@ -341,6 +341,92 @@ components:
         - isAdmin
         - createdAt
 
+    # ---------------------------------------------------------------
+    # Scorecard — the multi-factor decision breakdown
+    # ---------------------------------------------------------------
+    ScorecardFactor:
+      type: object
+      properties:
+        score:
+          type: number
+          description: Points earned for this factor
+        maxScore:
+          type: number
+          description: Maximum possible points for this factor
+        label:
+          type: string
+          description: Human-readable classification label
+      required:
+        - score
+        - maxScore
+        - label
+
+    CashflowStrengthFactor:
+      allOf:
+        - $ref: "#/components/schemas/ScorecardFactor"
+        - type: object
+          properties:
+            netRatio:
+              type: number
+              description: (totalInflow - totalOutflow) / totalInflow
+            netCashflow:
+              type: number
+          required:
+            - netRatio
+            - netCashflow
+
+    ActivityLevelFactor:
+      allOf:
+        - $ref: "#/components/schemas/ScorecardFactor"
+        - type: object
+          properties:
+            transactionCount:
+              type: integer
+          required:
+            - transactionCount
+
+    ConsistencyFactor:
+      allOf:
+        - $ref: "#/components/schemas/ScorecardFactor"
+        - type: object
+          properties:
+            cv:
+              type: number
+              nullable: true
+              description: Coefficient of variation of monthly inflows (null if < 2 months data)
+            monthCount:
+              type: integer
+              description: Number of calendar months with inflow transactions
+          required:
+            - monthCount
+
+    Scorecard:
+      type: object
+      description: Multi-factor credit assessment scorecard
+      properties:
+        cashflowStrength:
+          $ref: "#/components/schemas/CashflowStrengthFactor"
+        activityLevel:
+          $ref: "#/components/schemas/ActivityLevelFactor"
+        consistency:
+          $ref: "#/components/schemas/ConsistencyFactor"
+        totalScore:
+          type: number
+          description: Weighted total score (0–100)
+        maxScore:
+          type: number
+          description: Maximum possible total score (always 100)
+        statusReason:
+          type: string
+          description: Plain-English explanation of the final decision
+      required:
+        - cashflowStrength
+        - activityLevel
+        - consistency
+        - totalScore
+        - maxScore
+        - statusReason
+
     Assessment:
       type: object
       properties:
@@ -371,6 +457,15 @@ components:
         - transactionCount
         - status
         - createdAt
+
+    # AssessmentDetail = Assessment + scorecard (returned by upload + GET /id)
+    AssessmentDetail:
+      allOf:
+        - $ref: "#/components/schemas/Assessment"
+        - type: object
+          properties:
+            scorecard:
+              $ref: "#/components/schemas/Scorecard"
 
     AssessmentSummary:
       type: object

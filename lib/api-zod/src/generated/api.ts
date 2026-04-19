@@ -78,7 +78,7 @@ export const ListAssessmentsResponseItem = zod.object({
 export const ListAssessmentsResponse = zod.array(ListAssessmentsResponseItem);
 
 /**
- * @summary Upload an Excel file for assessment
+ * @summary Upload an Excel or CSV file for assessment
  */
 export const UploadAssessmentBody = zod.object({
   file: zod.instanceof(File),
@@ -91,16 +91,91 @@ export const GetAssessmentParams = zod.object({
   id: zod.coerce.number(),
 });
 
-export const GetAssessmentResponse = zod.object({
-  id: zod.number(),
-  userId: zod.number(),
-  fileName: zod.string(),
-  totalInflow: zod.number(),
-  totalOutflow: zod.number(),
-  transactionCount: zod.number(),
-  status: zod.enum(["PASS", "REVIEW", "FAIL"]),
-  createdAt: zod.coerce.date(),
-});
+export const GetAssessmentResponse = zod
+  .object({
+    id: zod.number(),
+    userId: zod.number(),
+    fileName: zod.string(),
+    totalInflow: zod.number(),
+    totalOutflow: zod.number(),
+    transactionCount: zod.number(),
+    status: zod.enum(["PASS", "REVIEW", "FAIL"]),
+    createdAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      scorecard: zod
+        .object({
+          cashflowStrength: zod
+            .object({
+              score: zod.number().describe("Points earned for this factor"),
+              maxScore: zod
+                .number()
+                .describe("Maximum possible points for this factor"),
+              label: zod
+                .string()
+                .describe("Human-readable classification label"),
+            })
+            .and(
+              zod.object({
+                netRatio: zod
+                  .number()
+                  .describe("(totalInflow - totalOutflow) \/ totalInflow"),
+                netCashflow: zod.number(),
+              }),
+            ),
+          activityLevel: zod
+            .object({
+              score: zod.number().describe("Points earned for this factor"),
+              maxScore: zod
+                .number()
+                .describe("Maximum possible points for this factor"),
+              label: zod
+                .string()
+                .describe("Human-readable classification label"),
+            })
+            .and(
+              zod.object({
+                transactionCount: zod.number(),
+              }),
+            ),
+          consistency: zod
+            .object({
+              score: zod.number().describe("Points earned for this factor"),
+              maxScore: zod
+                .number()
+                .describe("Maximum possible points for this factor"),
+              label: zod
+                .string()
+                .describe("Human-readable classification label"),
+            })
+            .and(
+              zod.object({
+                cv: zod
+                  .number()
+                  .nullish()
+                  .describe(
+                    "Coefficient of variation of monthly inflows (null if < 2 months data)",
+                  ),
+                monthCount: zod
+                  .number()
+                  .describe(
+                    "Number of calendar months with inflow transactions",
+                  ),
+              }),
+            ),
+          totalScore: zod.number().describe("Weighted total score (0–100)"),
+          maxScore: zod
+            .number()
+            .describe("Maximum possible total score (always 100)"),
+          statusReason: zod
+            .string()
+            .describe("Plain-English explanation of the final decision"),
+        })
+        .optional()
+        .describe("Multi-factor credit assessment scorecard"),
+    }),
+  );
 
 /**
  * @summary Get dashboard summary stats for current user
