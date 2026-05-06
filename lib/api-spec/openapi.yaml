@@ -273,6 +273,66 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/settings:
+    get:
+      operationId: adminGetSettings
+      tags: [admin]
+      summary: Admin - get current assessment configuration
+      responses:
+        "200":
+          description: Current configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentConfig"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: adminUpdateSettings
+      tags: [admin]
+      summary: Admin - update assessment configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssessmentConfigInput"
+      responses:
+        "200":
+          description: Updated configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentConfig"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -342,24 +402,136 @@ components:
         - createdAt
 
     # ---------------------------------------------------------------
+    # Admin configuration for the assessment engine
+    # ---------------------------------------------------------------
+    AssessmentConfig:
+      type: object
+      description: Configurable parameters for the assessment scoring engine
+      properties:
+        id:
+          type: integer
+        minMonths:
+          type: integer
+          description: Minimum months of data required to allow a PASS verdict
+        minTransactions:
+          type: integer
+          description: Minimum transaction count required to allow a PASS verdict
+        passThreshold:
+          type: integer
+          description: Minimum score (0-100) for a PASS verdict
+        reviewThreshold:
+          type: integer
+          description: Minimum score (0-100) for a REVIEW verdict (below this = FAIL)
+        cashflowWeight:
+          type: number
+          description: Weight (%) applied to the cashflow strength factor
+        activityWeight:
+          type: number
+          description: Weight (%) applied to the activity level factor
+        consistencyWeight:
+          type: number
+          description: Weight (%) applied to the income consistency factor
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - minMonths
+        - minTransactions
+        - passThreshold
+        - reviewThreshold
+        - cashflowWeight
+        - activityWeight
+        - consistencyWeight
+        - updatedAt
+
+    AssessmentConfigInput:
+      type: object
+      description: Input for updating assessment configuration
+      properties:
+        minMonths:
+          type: integer
+          minimum: 1
+          maximum: 24
+        minTransactions:
+          type: integer
+          minimum: 1
+          maximum: 500
+        passThreshold:
+          type: integer
+          minimum: 1
+          maximum: 100
+        reviewThreshold:
+          type: integer
+          minimum: 0
+          maximum: 99
+        cashflowWeight:
+          type: number
+          minimum: 0
+          maximum: 100
+        activityWeight:
+          type: number
+          minimum: 0
+          maximum: 100
+        consistencyWeight:
+          type: number
+          minimum: 0
+          maximum: 100
+      required:
+        - minMonths
+        - minTransactions
+        - passThreshold
+        - reviewThreshold
+        - cashflowWeight
+        - activityWeight
+        - consistencyWeight
+
+    # ---------------------------------------------------------------
     # Scorecard — the multi-factor decision breakdown
     # ---------------------------------------------------------------
+    TriggeredRule:
+      type: object
+      description: A rule that affected the final assessment decision
+      properties:
+        rule:
+          type: string
+          description: Machine-readable rule identifier
+        effect:
+          type: string
+          enum: [auto-fail, cap-review, score-penalty, passed]
+          description: How this rule affected the verdict
+        description:
+          type: string
+          description: Human-readable explanation of this rule
+      required:
+        - rule
+        - effect
+        - description
+
     ScorecardFactor:
       type: object
       properties:
         score:
           type: number
-          description: Points earned for this factor
+          description: Weighted points earned for this factor (contributes to 0-100 total)
         maxScore:
           type: number
-          description: Maximum possible points for this factor
+          description: Maximum possible weighted points for this factor
         label:
           type: string
           description: Human-readable classification label
+        normalizedScore:
+          type: number
+          description: Raw 0-100 score for this factor before weight is applied
+        weight:
+          type: number
+          description: Weight percentage applied to this factor
       required:
         - score
         - maxScore
         - label
+        - normalizedScore
+        - weight
 
     CashflowStrengthFactor:
       allOf:
@@ -397,8 +569,18 @@ components:
             monthCount:
               type: integer
               description: Number of calendar months with inflow transactions
+            irregularityScore:
+              type: number
+              description: Penalty points subtracted due to irregular patterns
+            irregularityFlags:
+              type: array
+              items:
+                type: string
+              description: List of detected irregularity issues
           required:
             - monthCount
+            - irregularityScore
+            - irregularityFlags
 
     Scorecard:
       type: object
@@ -419,6 +601,37 @@ components:
         statusReason:
           type: string
           description: Plain-English explanation of the final decision
+        triggeredRules:
+          type: array
+          items:
+            $ref: "#/components/schemas/TriggeredRule"
+          description: Rules that affected the final verdict
+        configSnapshot:
+          type: object
+          description: Configuration values used when this assessment was scored
+          properties:
+            passThreshold:
+              type: integer
+            reviewThreshold:
+              type: integer
+            minMonths:
+              type: integer
+            minTransactions:
+              type: integer
+            cashflowWeight:
+              type: number
+            activityWeight:
+              type: number
+            consistencyWeight:
+              type: number
+          required:
+            - passThreshold
+            - reviewThreshold
+            - minMonths
+            - minTransactions
+            - cashflowWeight
+            - activityWeight
+            - consistencyWeight
       required:
         - cashflowStrength
         - activityLevel
@@ -426,6 +639,8 @@ components:
         - totalScore
         - maxScore
         - statusReason
+        - triggeredRules
+        - configSnapshot
 
     Assessment:
       type: object

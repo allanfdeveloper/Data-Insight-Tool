@@ -5,6 +5,7 @@ import { db, usersTable, assessmentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
 import { parseFile } from "../lib/parseExcel";
 import { computeScorecard } from "../lib/scorecard";
+import { getOrCreateConfig } from "./admin";
 import {
   ListAssessmentsResponse,
   GetAssessmentParams,
@@ -85,15 +86,19 @@ router.post(
 
     const { totalInflow, totalOutflow, transactionCount, rows } = parseResult;
 
-    // 2. Run the multi-factor scoring engine
+    // 2. Load current config from DB (so settings changes take effect immediately)
+    const config = await getOrCreateConfig();
+
+    // 3. Run the multi-factor scoring engine with live config
     const { scorecard, status } = computeScorecard(
       totalInflow,
       totalOutflow,
       transactionCount,
-      rows
+      rows,
+      config
     );
 
-    // 3. Persist to database
+    // 4. Persist to database
     const userId = (req as any).userId as number;
     try {
       const [assessment] = await db
@@ -177,7 +182,6 @@ router.get("/assessments/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Pass scorecard through explicitly — it is stored as JSONB and returned as-is
   res.json(GetAssessmentResponse.parse(assessment));
 });
 

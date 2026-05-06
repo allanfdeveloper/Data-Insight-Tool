@@ -108,13 +108,25 @@ export const GetAssessmentResponse = zod
         .object({
           cashflowStrength: zod
             .object({
-              score: zod.number().describe("Points earned for this factor"),
+              score: zod
+                .number()
+                .describe(
+                  "Weighted points earned for this factor (contributes to 0-100 total)",
+                ),
               maxScore: zod
                 .number()
-                .describe("Maximum possible points for this factor"),
+                .describe("Maximum possible weighted points for this factor"),
               label: zod
                 .string()
                 .describe("Human-readable classification label"),
+              normalizedScore: zod
+                .number()
+                .describe(
+                  "Raw 0-100 score for this factor before weight is applied",
+                ),
+              weight: zod
+                .number()
+                .describe("Weight percentage applied to this factor"),
             })
             .and(
               zod.object({
@@ -126,13 +138,25 @@ export const GetAssessmentResponse = zod
             ),
           activityLevel: zod
             .object({
-              score: zod.number().describe("Points earned for this factor"),
+              score: zod
+                .number()
+                .describe(
+                  "Weighted points earned for this factor (contributes to 0-100 total)",
+                ),
               maxScore: zod
                 .number()
-                .describe("Maximum possible points for this factor"),
+                .describe("Maximum possible weighted points for this factor"),
               label: zod
                 .string()
                 .describe("Human-readable classification label"),
+              normalizedScore: zod
+                .number()
+                .describe(
+                  "Raw 0-100 score for this factor before weight is applied",
+                ),
+              weight: zod
+                .number()
+                .describe("Weight percentage applied to this factor"),
             })
             .and(
               zod.object({
@@ -141,13 +165,25 @@ export const GetAssessmentResponse = zod
             ),
           consistency: zod
             .object({
-              score: zod.number().describe("Points earned for this factor"),
+              score: zod
+                .number()
+                .describe(
+                  "Weighted points earned for this factor (contributes to 0-100 total)",
+                ),
               maxScore: zod
                 .number()
-                .describe("Maximum possible points for this factor"),
+                .describe("Maximum possible weighted points for this factor"),
               label: zod
                 .string()
                 .describe("Human-readable classification label"),
+              normalizedScore: zod
+                .number()
+                .describe(
+                  "Raw 0-100 score for this factor before weight is applied",
+                ),
+              weight: zod
+                .number()
+                .describe("Weight percentage applied to this factor"),
             })
             .and(
               zod.object({
@@ -162,6 +198,14 @@ export const GetAssessmentResponse = zod
                   .describe(
                     "Number of calendar months with inflow transactions",
                   ),
+                irregularityScore: zod
+                  .number()
+                  .describe(
+                    "Penalty points subtracted due to irregular patterns",
+                  ),
+                irregularityFlags: zod
+                  .array(zod.string())
+                  .describe("List of detected irregularity issues"),
               }),
             ),
           totalScore: zod.number().describe("Weighted total score (0–100)"),
@@ -171,6 +215,41 @@ export const GetAssessmentResponse = zod
           statusReason: zod
             .string()
             .describe("Plain-English explanation of the final decision"),
+          triggeredRules: zod
+            .array(
+              zod
+                .object({
+                  rule: zod
+                    .string()
+                    .describe("Machine-readable rule identifier"),
+                  effect: zod
+                    .enum([
+                      "auto-fail",
+                      "cap-review",
+                      "score-penalty",
+                      "passed",
+                    ])
+                    .describe("How this rule affected the verdict"),
+                  description: zod
+                    .string()
+                    .describe("Human-readable explanation of this rule"),
+                })
+                .describe("A rule that affected the final assessment decision"),
+            )
+            .describe("Rules that affected the final verdict"),
+          configSnapshot: zod
+            .object({
+              passThreshold: zod.number(),
+              reviewThreshold: zod.number(),
+              minMonths: zod.number(),
+              minTransactions: zod.number(),
+              cashflowWeight: zod.number(),
+              activityWeight: zod.number(),
+              consistencyWeight: zod.number(),
+            })
+            .describe(
+              "Configuration values used when this assessment was scored",
+            ),
         })
         .optional()
         .describe("Multi-factor credit assessment scorecard"),
@@ -233,3 +312,117 @@ export const AdminGetStatsResponse = zod.object({
   reviewCount: zod.number(),
   failCount: zod.number(),
 });
+
+/**
+ * @summary Admin - get current assessment configuration
+ */
+export const AdminGetSettingsResponse = zod
+  .object({
+    id: zod.number(),
+    minMonths: zod
+      .number()
+      .describe("Minimum months of data required to allow a PASS verdict"),
+    minTransactions: zod
+      .number()
+      .describe("Minimum transaction count required to allow a PASS verdict"),
+    passThreshold: zod
+      .number()
+      .describe("Minimum score (0-100) for a PASS verdict"),
+    reviewThreshold: zod
+      .number()
+      .describe(
+        "Minimum score (0-100) for a REVIEW verdict (below this = FAIL)",
+      ),
+    cashflowWeight: zod
+      .number()
+      .describe("Weight (%) applied to the cashflow strength factor"),
+    activityWeight: zod
+      .number()
+      .describe("Weight (%) applied to the activity level factor"),
+    consistencyWeight: zod
+      .number()
+      .describe("Weight (%) applied to the income consistency factor"),
+    updatedAt: zod.coerce.date(),
+  })
+  .describe("Configurable parameters for the assessment scoring engine");
+
+/**
+ * @summary Admin - update assessment configuration
+ */
+export const adminUpdateSettingsBodyMinMonthsMax = 24;
+
+export const adminUpdateSettingsBodyMinTransactionsMax = 500;
+
+export const adminUpdateSettingsBodyPassThresholdMax = 100;
+
+export const adminUpdateSettingsBodyReviewThresholdMin = 0;
+export const adminUpdateSettingsBodyReviewThresholdMax = 99;
+
+export const adminUpdateSettingsBodyCashflowWeightMin = 0;
+export const adminUpdateSettingsBodyCashflowWeightMax = 100;
+
+export const adminUpdateSettingsBodyActivityWeightMin = 0;
+export const adminUpdateSettingsBodyActivityWeightMax = 100;
+
+export const adminUpdateSettingsBodyConsistencyWeightMin = 0;
+export const adminUpdateSettingsBodyConsistencyWeightMax = 100;
+
+export const AdminUpdateSettingsBody = zod
+  .object({
+    minMonths: zod.number().min(1).max(adminUpdateSettingsBodyMinMonthsMax),
+    minTransactions: zod
+      .number()
+      .min(1)
+      .max(adminUpdateSettingsBodyMinTransactionsMax),
+    passThreshold: zod
+      .number()
+      .min(1)
+      .max(adminUpdateSettingsBodyPassThresholdMax),
+    reviewThreshold: zod
+      .number()
+      .min(adminUpdateSettingsBodyReviewThresholdMin)
+      .max(adminUpdateSettingsBodyReviewThresholdMax),
+    cashflowWeight: zod
+      .number()
+      .min(adminUpdateSettingsBodyCashflowWeightMin)
+      .max(adminUpdateSettingsBodyCashflowWeightMax),
+    activityWeight: zod
+      .number()
+      .min(adminUpdateSettingsBodyActivityWeightMin)
+      .max(adminUpdateSettingsBodyActivityWeightMax),
+    consistencyWeight: zod
+      .number()
+      .min(adminUpdateSettingsBodyConsistencyWeightMin)
+      .max(adminUpdateSettingsBodyConsistencyWeightMax),
+  })
+  .describe("Input for updating assessment configuration");
+
+export const AdminUpdateSettingsResponse = zod
+  .object({
+    id: zod.number(),
+    minMonths: zod
+      .number()
+      .describe("Minimum months of data required to allow a PASS verdict"),
+    minTransactions: zod
+      .number()
+      .describe("Minimum transaction count required to allow a PASS verdict"),
+    passThreshold: zod
+      .number()
+      .describe("Minimum score (0-100) for a PASS verdict"),
+    reviewThreshold: zod
+      .number()
+      .describe(
+        "Minimum score (0-100) for a REVIEW verdict (below this = FAIL)",
+      ),
+    cashflowWeight: zod
+      .number()
+      .describe("Weight (%) applied to the cashflow strength factor"),
+    activityWeight: zod
+      .number()
+      .describe("Weight (%) applied to the activity level factor"),
+    consistencyWeight: zod
+      .number()
+      .describe("Weight (%) applied to the income consistency factor"),
+    updatedAt: zod.coerce.date(),
+  })
+  .describe("Configurable parameters for the assessment scoring engine");

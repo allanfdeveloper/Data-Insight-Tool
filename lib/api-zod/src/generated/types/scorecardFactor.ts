@@ -7,10 +7,14 @@
  */
 
 export interface ScorecardFactor {
-  /** Points earned for this factor */
+  /** Weighted points earned for this factor (contributes to 0-100 total) */
   score: number;
-  /** Maximum possible points for this factor */
+  /** Maximum possible weighted points for this factor */
   maxScore: number;
   /** Human-readable classification label */
   label: string;
+  /** Raw 0-100 score for this factor before weight is applied */
+  normalizedScore: number;
+  /** Weight percentage applied to this factor */
+  weight: number;
 }

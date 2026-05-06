@@ -12,4 +12,8 @@ export type ConsistencyFactor = ScorecardFactor & {
   cv?: number | null;
   /** Number of calendar months with inflow transactions */
   monthCount: number;
+  /** Penalty points subtracted due to irregular patterns */
+  irregularityScore: number;
+  /** List of detected irregularity issues */
+  irregularityFlags: string[];
 };

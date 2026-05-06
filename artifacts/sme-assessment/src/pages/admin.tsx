@@ -15,30 +15,59 @@ import {
   XCircle,
   Loader2,
   ShieldAlert,
+  Settings,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+
+function AdminTabs({ active }: { active: "overview" | "settings" }) {
+  return (
+    <div className="flex gap-1 border-b border-card-border mb-8">
+      <Link href="/admin">
+        <button
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            active === "overview"
+              ? "border-accent text-accent"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Users className="h-4 w-4" />
+          Overview
+        </button>
+      </Link>
+      <Link href="/admin/settings">
+        <button
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            active === "settings"
+              ? "border-accent text-accent"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Settings className="h-4 w-4" />
+          Assessment Rules
+        </button>
+      </Link>
+    </div>
+  );
+}
 
 function StatusBadge({ status }: { status: string }) {
   if (status === "PASS") {
     return (
       <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 text-xs">
-        <CheckCircle2 className="h-3 w-3 mr-1" />
-        PASS
+        <CheckCircle2 className="h-3 w-3 mr-1" />PASS
       </Badge>
     );
   }
   if (status === "REVIEW") {
     return (
       <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 text-xs">
-        <AlertCircle className="h-3 w-3 mr-1" />
-        REVIEW
+        <AlertCircle className="h-3 w-3 mr-1" />REVIEW
       </Badge>
     );
   }
   return (
     <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 text-xs">
-      <XCircle className="h-3 w-3 mr-1" />
-      FAIL
+      <XCircle className="h-3 w-3 mr-1" />FAIL
     </Badge>
   );
 }
@@ -56,9 +85,7 @@ export default function AdminPage() {
   const [, setLocation] = useLocation();
 
   useEffect(() => {
-    if (user && !user.isAdmin) {
-      setLocation("/dashboard");
-    }
+    if (user && !user.isAdmin) setLocation("/dashboard");
   }, [user, setLocation]);
 
   const { data: users, isLoading: loadingUsers, isError: usersError } = useAdminListUsers();
@@ -68,13 +95,15 @@ export default function AdminPage() {
 
   return (
     <Layout>
-      <div className="mb-8">
+      <div className="mb-6">
         <div className="flex items-center gap-2 mb-1">
           <ShieldAlert className="h-5 w-5 text-accent" />
           <h1 className="text-2xl font-bold text-foreground">Admin Panel</h1>
         </div>
         <p className="text-sm text-muted-foreground">Platform overview and user management</p>
       </div>
+
+      <AdminTabs active="overview" />
 
       {/* Platform Stats */}
       {!loadingStats && stats && (

@@ -35,13 +35,105 @@ export interface AuthResponse {
   message: string;
 }
 
+/**
+ * Configurable parameters for the assessment scoring engine
+ */
+export interface AssessmentConfig {
+  id: number;
+  /** Minimum months of data required to allow a PASS verdict */
+  minMonths: number;
+  /** Minimum transaction count required to allow a PASS verdict */
+  minTransactions: number;
+  /** Minimum score (0-100) for a PASS verdict */
+  passThreshold: number;
+  /** Minimum score (0-100) for a REVIEW verdict (below this = FAIL) */
+  reviewThreshold: number;
+  /** Weight (%) applied to the cashflow strength factor */
+  cashflowWeight: number;
+  /** Weight (%) applied to the activity level factor */
+  activityWeight: number;
+  /** Weight (%) applied to the income consistency factor */
+  consistencyWeight: number;
+  updatedAt: string;
+}
+
+/**
+ * Input for updating assessment configuration
+ */
+export interface AssessmentConfigInput {
+  /**
+   * @minimum 1
+   * @maximum 24
+   */
+  minMonths: number;
+  /**
+   * @minimum 1
+   * @maximum 500
+   */
+  minTransactions: number;
+  /**
+   * @minimum 1
+   * @maximum 100
+   */
+  passThreshold: number;
+  /**
+   * @minimum 0
+   * @maximum 99
+   */
+  reviewThreshold: number;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  cashflowWeight: number;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  activityWeight: number;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  consistencyWeight: number;
+}
+
+/**
+ * How this rule affected the verdict
+ */
+export type TriggeredRuleEffect =
+  (typeof TriggeredRuleEffect)[keyof typeof TriggeredRuleEffect];
+
+export const TriggeredRuleEffect = {
+  "auto-fail": "auto-fail",
+  "cap-review": "cap-review",
+  "score-penalty": "score-penalty",
+  passed: "passed",
+} as const;
+
+/**
+ * A rule that affected the final assessment decision
+ */
+export interface TriggeredRule {
+  /** Machine-readable rule identifier */
+  rule: string;
+  /** How this rule affected the verdict */
+  effect: TriggeredRuleEffect;
+  /** Human-readable explanation of this rule */
+  description: string;
+}
+
 export interface ScorecardFactor {
-  /** Points earned for this factor */
+  /** Weighted points earned for this factor (contributes to 0-100 total) */
   score: number;
-  /** Maximum possible points for this factor */
+  /** Maximum possible weighted points for this factor */
   maxScore: number;
   /** Human-readable classification label */
   label: string;
+  /** Raw 0-100 score for this factor before weight is applied */
+  normalizedScore: number;
+  /** Weight percentage applied to this factor */
+  weight: number;
 }
 
 export type CashflowStrengthFactor = ScorecardFactor & {
@@ -59,6 +151,23 @@ export type ConsistencyFactor = ScorecardFactor & {
   cv?: number | null;
   /** Number of calendar months with inflow transactions */
   monthCount: number;
+  /** Penalty points subtracted due to irregular patterns */
+  irregularityScore: number;
+  /** List of detected irregularity issues */
+  irregularityFlags: string[];
+};
+
+/**
+ * Configuration values used when this assessment was scored
+ */
+export type ScorecardConfigSnapshot = {
+  passThreshold: number;
+  reviewThreshold: number;
+  minMonths: number;
+  minTransactions: number;
+  cashflowWeight: number;
+  activityWeight: number;
+  consistencyWeight: number;
 };
 
 /**
@@ -74,6 +183,10 @@ export interface Scorecard {
   maxScore: number;
   /** Plain-English explanation of the final decision */
   statusReason: string;
+  /** Rules that affected the final verdict */
+  triggeredRules: TriggeredRule[];
+  /** Configuration values used when this assessment was scored */
+  configSnapshot: ScorecardConfigSnapshot;
 }
 
 export type AssessmentStatus =

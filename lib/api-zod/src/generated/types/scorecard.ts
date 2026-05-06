@@ -8,6 +8,8 @@
 import type { ActivityLevelFactor } from "./activityLevelFactor";
 import type { CashflowStrengthFactor } from "./cashflowStrengthFactor";
 import type { ConsistencyFactor } from "./consistencyFactor";
+import type { ScorecardConfigSnapshot } from "./scorecardConfigSnapshot";
+import type { TriggeredRule } from "./triggeredRule";
 
 /**
  * Multi-factor credit assessment scorecard
@@ -22,4 +24,8 @@ export interface Scorecard {
   maxScore: number;
   /** Plain-English explanation of the final decision */
   statusReason: string;
+  /** Rules that affected the final verdict */
+  triggeredRules: TriggeredRule[];
+  /** Configuration values used when this assessment was scored */
+  configSnapshot: ScorecardConfigSnapshot;
 }

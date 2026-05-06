@@ -8,6 +8,7 @@ import SignupPage from "@/pages/signup";
 import DashboardPage from "@/pages/dashboard";
 import AssessmentDetailPage from "@/pages/assessment-detail";
 import AdminPage from "@/pages/admin";
+import AdminSettingsPage from "@/pages/admin-settings";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/signup" component={SignupPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/assessment/:id" component={AssessmentDetailPage} />
+      <Route path="/admin/settings" component={AdminSettingsPage} />
       <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>

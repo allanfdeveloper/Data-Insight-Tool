@@ -20,6 +20,8 @@ import type {
   AdminStats,
   AdminUserRecord,
   Assessment,
+  AssessmentConfig,
+  AssessmentConfigInput,
   AssessmentDetail,
   AssessmentSummary,
   AuthCredentials,
@@ -906,3 +908,164 @@ export function useAdminGetStats<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Admin - get current assessment configuration
+ */
+export const getAdminGetSettingsUrl = () => {
+  return `/api/admin/settings`;
+};
+
+export const adminGetSettings = async (
+  options?: RequestInit,
+): Promise<AssessmentConfig> => {
+  return customFetch<AssessmentConfig>(getAdminGetSettingsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getAdminGetSettingsQueryKey = () => {
+  return [`/api/admin/settings`] as const;
+};
+
+export const getAdminGetSettingsQueryOptions = <
+  TData = Awaited<ReturnType<typeof adminGetSettings>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof adminGetSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getAdminGetSettingsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof adminGetSettings>>
+  > = ({ signal }) => adminGetSettings({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof adminGetSettings>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type AdminGetSettingsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof adminGetSettings>>
+>;
+export type AdminGetSettingsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Admin - get current assessment configuration
+ */
+
+export function useAdminGetSettings<
+  TData = Awaited<ReturnType<typeof adminGetSettings>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof adminGetSettings>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getAdminGetSettingsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Admin - update assessment configuration
+ */
+export const getAdminUpdateSettingsUrl = () => {
+  return `/api/admin/settings`;
+};
+
+export const adminUpdateSettings = async (
+  assessmentConfigInput: AssessmentConfigInput,
+  options?: RequestInit,
+): Promise<AssessmentConfig> => {
+  return customFetch<AssessmentConfig>(getAdminUpdateSettingsUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(assessmentConfigInput),
+  });
+};
+
+export const getAdminUpdateSettingsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminUpdateSettings>>,
+    TError,
+    { data: BodyType<AssessmentConfigInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminUpdateSettings>>,
+  TError,
+  { data: BodyType<AssessmentConfigInput> },
+  TContext
+> => {
+  const mutationKey = ["adminUpdateSettings"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminUpdateSettings>>,
+    { data: BodyType<AssessmentConfigInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return adminUpdateSettings(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminUpdateSettingsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminUpdateSettings>>
+>;
+export type AdminUpdateSettingsMutationBody = BodyType<AssessmentConfigInput>;
+export type AdminUpdateSettingsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Admin - update assessment configuration
+ */
+export const useAdminUpdateSettings = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminUpdateSettings>>,
+    TError,
+    { data: BodyType<AssessmentConfigInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminUpdateSettings>>,
+  TError,
+  { data: BodyType<AssessmentConfigInput> },
+  TContext
+> => {
+  return useMutation(getAdminUpdateSettingsMutationOptions(options));
+};
