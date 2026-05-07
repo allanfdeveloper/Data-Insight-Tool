@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ActivityLevelFactor } from "./activityLevelFactor";
+import type { AssessmentConfidence } from "./assessmentConfidence";
 import type { CashflowStrengthFactor } from "./cashflowStrengthFactor";
 import type { ConsistencyFactor } from "./consistencyFactor";
 import type { ScorecardConfigSnapshot } from "./scorecardConfigSnapshot";
@@ -24,6 +25,9 @@ export interface Scorecard {
   maxScore: number;
   /** Plain-English explanation of the final decision */
   statusReason: string;
+  confidence: AssessmentConfidence;
+  /** Explanations for why confidence is reduced (empty when HIGH) */
+  confidenceReasons: string[];
   /** Rules that affected the final verdict */
   triggeredRules: TriggeredRule[];
   /** Configuration values used when this assessment was scored */

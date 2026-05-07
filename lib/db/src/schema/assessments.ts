@@ -13,6 +13,7 @@ export const assessmentsTable = pgTable("assessments", {
   totalOutflow: real("total_outflow").notNull().default(0),
   transactionCount: integer("transaction_count").notNull().default(0),
   status: text("status", { enum: ["PASS", "REVIEW", "FAIL"] }).notNull(),
+  confidence: text("confidence", { enum: ["HIGH", "MEDIUM", "LOW"] }).notNull().default("HIGH"),
   // Stores the full multi-factor scorecard as computed at upload time
   scorecard: jsonb("scorecard"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

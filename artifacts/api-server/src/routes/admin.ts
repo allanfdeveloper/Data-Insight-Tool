@@ -76,9 +76,12 @@ router.get("/admin/stats", requireAuth, requireAdmin, async (req, res): Promise<
     AdminGetStatsResponse.parse({
       totalUsers: allUsers.length,
       totalAssessments: allAssessments.length,
-      passCount:   allAssessments.filter((a) => a.status === "PASS").length,
-      reviewCount: allAssessments.filter((a) => a.status === "REVIEW").length,
-      failCount:   allAssessments.filter((a) => a.status === "FAIL").length,
+      passCount:             allAssessments.filter((a) => a.status === "PASS").length,
+      reviewCount:           allAssessments.filter((a) => a.status === "REVIEW").length,
+      failCount:             allAssessments.filter((a) => a.status === "FAIL").length,
+      highConfidenceCount:   allAssessments.filter((a) => a.confidence === "HIGH").length,
+      mediumConfidenceCount: allAssessments.filter((a) => a.confidence === "MEDIUM").length,
+      lowConfidenceCount:    allAssessments.filter((a) => a.confidence === "LOW").length,
     })
   );
 });

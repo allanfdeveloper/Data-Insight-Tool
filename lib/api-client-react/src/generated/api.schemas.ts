@@ -99,6 +99,19 @@ export interface AssessmentConfigInput {
 }
 
 /**
+ * Confidence level of the assessment based on data sufficiency. HIGH = meets both minimum months and transaction requirements. MEDIUM = meets only one requirement. LOW = meets neither requirement.
+
+ */
+export type AssessmentConfidence =
+  (typeof AssessmentConfidence)[keyof typeof AssessmentConfidence];
+
+export const AssessmentConfidence = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+
+/**
  * How this rule affected the verdict
  */
 export type TriggeredRuleEffect =
@@ -109,6 +122,7 @@ export const TriggeredRuleEffect = {
   "cap-review": "cap-review",
   "score-penalty": "score-penalty",
   passed: "passed",
+  "confidence-warning": "confidence-warning",
 } as const;
 
 /**
@@ -183,6 +197,9 @@ export interface Scorecard {
   maxScore: number;
   /** Plain-English explanation of the final decision */
   statusReason: string;
+  confidence: AssessmentConfidence;
+  /** Explanations for why confidence is reduced (empty when HIGH) */
+  confidenceReasons: string[];
   /** Rules that affected the final verdict */
   triggeredRules: TriggeredRule[];
   /** Configuration values used when this assessment was scored */
@@ -206,6 +223,7 @@ export interface Assessment {
   totalOutflow: number;
   transactionCount: number;
   status: AssessmentStatus;
+  confidence: AssessmentConfidence;
   createdAt: string;
 }
 
@@ -236,6 +254,9 @@ export interface AdminStats {
   passCount: number;
   reviewCount: number;
   failCount: number;
+  highConfidenceCount: number;
+  mediumConfidenceCount: number;
+  lowConfidenceCount: number;
 }
 
 export type UploadAssessmentBody = {

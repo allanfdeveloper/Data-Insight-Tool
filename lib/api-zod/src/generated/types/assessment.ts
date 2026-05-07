@@ -5,6 +5,7 @@
  * SME Alternative Data Assessment API
  * OpenAPI spec version: 0.1.0
  */
+import type { AssessmentConfidence } from "./assessmentConfidence";
 import type { AssessmentStatus } from "./assessmentStatus";
 
 export interface Assessment {
@@ -15,5 +16,6 @@ export interface Assessment {
   totalOutflow: number;
   transactionCount: number;
   status: AssessmentStatus;
+  confidence: AssessmentConfidence;
   createdAt: Date;
 }

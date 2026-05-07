@@ -17,4 +17,5 @@ export const TriggeredRuleEffect = {
   "cap-review": "cap-review",
   "score-penalty": "score-penalty",
   passed: "passed",
+  "confidence-warning": "confidence-warning",
 } as const;

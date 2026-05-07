@@ -10,6 +10,7 @@ export * from "./activityLevelFactor";
 export * from "./adminStats";
 export * from "./adminUserRecord";
 export * from "./assessment";
+export * from "./assessmentConfidence";
 export * from "./assessmentConfig";
 export * from "./assessmentConfigInput";
 export * from "./assessmentDetail";

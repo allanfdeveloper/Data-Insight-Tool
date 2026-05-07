@@ -22,6 +22,9 @@ import {
   CheckCircle2,
   AlertCircle,
   XCircle,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,23 +33,42 @@ function StatusBadge({ status }: { status: string }) {
   if (status === "PASS") {
     return (
       <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100">
-        <CheckCircle2 className="h-3 w-3 mr-1" />
-        PASS
+        <CheckCircle2 className="h-3 w-3 mr-1" />PASS
       </Badge>
     );
   }
   if (status === "REVIEW") {
     return (
       <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100">
-        <AlertCircle className="h-3 w-3 mr-1" />
-        REVIEW
+        <AlertCircle className="h-3 w-3 mr-1" />REVIEW
       </Badge>
     );
   }
   return (
     <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100">
-      <XCircle className="h-3 w-3 mr-1" />
-      FAIL
+      <XCircle className="h-3 w-3 mr-1" />FAIL
+    </Badge>
+  );
+}
+
+function ConfidenceBadge({ confidence }: { confidence?: string }) {
+  if (!confidence || confidence === "HIGH") {
+    return (
+      <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 hover:bg-green-50 text-[10px] px-1.5 py-0.5">
+        <ShieldCheck className="h-2.5 w-2.5 mr-1" />HIGH
+      </Badge>
+    );
+  }
+  if (confidence === "MEDIUM") {
+    return (
+      <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 hover:bg-amber-50 text-[10px] px-1.5 py-0.5">
+        <ShieldAlert className="h-2.5 w-2.5 mr-1" />MED
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50 hover:bg-red-50 text-[10px] px-1.5 py-0.5">
+      <ShieldX className="h-2.5 w-2.5 mr-1" />LOW
     </Badge>
   );
 }
@@ -81,7 +103,6 @@ export default function DashboardPage() {
       return;
     }
 
-    // The generated hook builds FormData internally — just pass the File object
     uploadMutation.mutate(
       { data: { file: selectedFile } },
       {
@@ -93,12 +114,7 @@ export default function DashboardPage() {
           toast({ title: "Assessment complete", description: "Your file has been processed successfully." });
         },
         onError: (err: any) => {
-          // ApiError exposes the parsed response body on .data
-          const msg =
-            err?.data?.error ??
-            err?.data?.message ??
-            err?.message ??
-            "Failed to process file. Please try again.";
+          const msg = err?.data?.error ?? err?.data?.message ?? err?.message ?? "Failed to process file. Please try again.";
           toast({ title: "Upload failed", description: msg, variant: "destructive" });
         },
       }
@@ -107,12 +123,9 @@ export default function DashboardPage() {
 
   return (
     <Layout>
-      {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Welcome back, {user?.email}
-        </p>
+        <p className="text-sm text-muted-foreground mt-1">Welcome back, {user?.email}</p>
       </div>
 
       {/* Summary Stats */}
@@ -142,7 +155,10 @@ export default function DashboardPage() {
         <div className="bg-card border border-card-border rounded-xl p-5 mb-8">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-foreground">Latest Assessment</h2>
-            <StatusBadge status={summary.latestAssessment.status} />
+            <div className="flex items-center gap-2">
+              <ConfidenceBadge confidence={(summary.latestAssessment as any).confidence} />
+              <StatusBadge status={summary.latestAssessment.status} />
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div>
@@ -180,31 +196,15 @@ export default function DashboardPage() {
             id="file-upload"
             data-testid="input-file"
           />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fileInputRef.current?.click()}
-            data-testid="button-select-file"
-          >
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} data-testid="button-select-file">
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             {selectedFile ? selectedFile.name : "Select file (.xlsx, .csv)"}
           </Button>
-          <Button
-            size="sm"
-            onClick={handleUpload}
-            disabled={!selectedFile || uploadMutation.isPending}
-            data-testid="button-upload"
-          >
+          <Button size="sm" onClick={handleUpload} disabled={!selectedFile || uploadMutation.isPending} data-testid="button-upload">
             {uploadMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Processing...
-              </>
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Processing...</>
             ) : (
-              <>
-                <Upload className="h-4 w-4 mr-2" />
-                Run Assessment
-              </>
+              <><Upload className="h-4 w-4 mr-2" />Run Assessment</>
             )}
           </Button>
         </div>
@@ -241,7 +241,8 @@ export default function DashboardPage() {
                     <p className="text-xs text-muted-foreground mt-0.5">{formatDate(a.createdAt)}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
+                  <ConfidenceBadge confidence={(a as any).confidence} />
                   <StatusBadge status={a.status} />
                   <ChevronRight className="h-4 w-4 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
                 </div>

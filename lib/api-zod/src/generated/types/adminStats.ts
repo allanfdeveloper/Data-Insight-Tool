@@ -12,4 +12,7 @@ export interface AdminStats {
   passCount: number;
   reviewCount: number;
   failCount: number;
+  highConfidenceCount: number;
+  mediumConfidenceCount: number;
+  lowConfidenceCount: number;
 }

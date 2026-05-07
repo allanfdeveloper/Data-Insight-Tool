@@ -3,24 +3,25 @@
  *
  * Each factor is normalized to 0–100, then weighted and summed.
  * Configuration (weights, thresholds, minimum data requirements) is
- * loaded from the database and passed in at call time — nothing is
- * hardcoded here.
+ * loaded from the database and passed in at call time — nothing is hardcoded.
  *
- * Hard gates (override score-based decision):
+ * Confidence layer (separate from the verdict):
+ *   HIGH   — meets both minMonths AND minTransactions
+ *   MEDIUM — meets exactly one requirement
+ *   LOW    — meets neither requirement
+ *
+ * The score always determines PASS/REVIEW/FAIL (hard gates below).
+ * Insufficient data lowers confidence but never blocks a PASS.
+ *
+ * Hard gates (override score):
  *   1. Negative cashflow (outflows >= inflows) → FAIL
- *   2. Insufficient data (months < minMonths OR txn < minTransactions) → cap at REVIEW
- *   3. Highly irregular income (CV >= 0.9 OR heavy penalty) → REVIEW / FAIL
- *
- * Score-based decision (after gates):
- *   PASS   — totalScore >= passThreshold
- *   REVIEW — totalScore >= reviewThreshold
- *   FAIL   — totalScore < reviewThreshold
+ *   2. Critically irregular income              → FAIL / REVIEW
  */
 
 import type { TransactionRow } from "./parseExcel";
 
 // ---------------------------------------------------------------------------
-// Config type (mirrors the DB row — passed in from the route)
+// Config type
 // ---------------------------------------------------------------------------
 
 export interface AssessmentEngineConfig {
@@ -28,7 +29,7 @@ export interface AssessmentEngineConfig {
   minTransactions: number;
   passThreshold: number;
   reviewThreshold: number;
-  cashflowWeight: number;     // percentage (e.g. 20 means 20%)
+  cashflowWeight: number;
   activityWeight: number;
   consistencyWeight: number;
 }
@@ -44,7 +45,7 @@ export const DEFAULT_CONFIG: AssessmentEngineConfig = {
 };
 
 // ---------------------------------------------------------------------------
-// Irregularity detection thresholds (not user-configurable, keep stable)
+// Irregularity detection constants
 // ---------------------------------------------------------------------------
 
 const MAX_INFLOW_GAP_DAYS = 45;
@@ -98,7 +99,6 @@ function inflowStats(rows: TransactionRow[]) {
   return { mean, cv, maxGapDays, longGapCount, spikeCount };
 }
 
-/** Normalize cashflow net-ratio to 0–100 */
 function normalizeCashflow(netRatio: number): number {
   if (netRatio <= 0)   return 0;
   if (netRatio > 0.50) return 100;
@@ -108,7 +108,6 @@ function normalizeCashflow(netRatio: number): number {
   return 10;
 }
 
-/** Normalize transaction count to 0–100 */
 function normalizeActivity(txn: number): number {
   if (txn >= 50) return 100;
   if (txn >= 30) return 85;
@@ -118,7 +117,6 @@ function normalizeActivity(txn: number): number {
   return 8;
 }
 
-/** Normalize CV to 0–100 (lower CV = better) */
 function normalizeConsistency(cv: number): number {
   if (cv <= 0.10) return 100;
   if (cv <= 0.20) return 85;
@@ -133,9 +131,11 @@ function normalizeConsistency(cv: number): number {
 // Public types
 // ---------------------------------------------------------------------------
 
+export type AssessmentConfidence = "HIGH" | "MEDIUM" | "LOW";
+
 export interface TriggeredRule {
   rule: string;
-  effect: "auto-fail" | "cap-review" | "score-penalty" | "passed";
+  effect: "auto-fail" | "cap-review" | "score-penalty" | "passed" | "confidence-warning";
   description: string;
 }
 
@@ -180,6 +180,8 @@ export interface Scorecard {
   totalScore: number;
   maxScore: 100;
   statusReason: string;
+  confidence: AssessmentConfidence;
+  confidenceReasons: string[];
   triggeredRules: TriggeredRule[];
   configSnapshot: ConfigSnapshot;
 }
@@ -187,6 +189,7 @@ export interface Scorecard {
 export interface ScorecardResult {
   scorecard: Scorecard;
   status: "PASS" | "REVIEW" | "FAIL";
+  confidence: AssessmentConfidence;
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +266,6 @@ export function computeScorecard(
 
   const irregularityFlags: string[] = [];
   let irregularityScore = 0;
-
   let conNorm: number;
   let conLabel: string;
 
@@ -305,12 +307,11 @@ export function computeScorecard(
   const conWeighted = Math.round((adjustedConNorm * consistencyWeight) / 100 * 10) / 10;
 
   if (irregularityScore > 0 && monthCount >= 2) {
-    const afterPenalty =
+    conLabel =
       adjustedConNorm >= 65 ? "Consistent income" :
       adjustedConNorm >= 45 ? "Moderately consistent income" :
       adjustedConNorm >= 20 ? "Irregular income" :
       "Highly irregular income";
-    conLabel = afterPenalty;
   }
 
   const consistency: ConsistencyFactor = {
@@ -328,15 +329,41 @@ export function computeScorecard(
   // ── 4. Total score ──────────────────────────────────────────────────────
   const totalScore = Math.round(cfWeighted + actWeighted + conWeighted);
 
-  // ── 5. Hard gates + triggered rules ─────────────────────────────────────
+  // ── 5. Confidence layer ─────────────────────────────────────────────────
+  const meetsMonths = monthCount >= minMonths;
+  const meetsTxn = transactionCount >= minTransactions;
+
+  let confidence: AssessmentConfidence;
+  const confidenceReasons: string[] = [];
+
+  if (meetsMonths && meetsTxn) {
+    confidence = "HIGH";
+  } else if (meetsMonths || meetsTxn) {
+    confidence = "MEDIUM";
+    if (!meetsMonths) {
+      confidenceReasons.push(
+        `Assessment confidence is MEDIUM due to limited monthly history (${monthCount} of ${minMonths} required months).`
+      );
+    }
+    if (!meetsTxn) {
+      confidenceReasons.push(
+        `Assessment confidence is MEDIUM due to limited transaction activity (${transactionCount} of ${minTransactions} required transactions).`
+      );
+    }
+  } else {
+    confidence = "LOW";
+    confidenceReasons.push(
+      `Assessment confidence is LOW due to insufficient monthly history (${monthCount} of ${minMonths} required months) and insufficient transaction activity (${transactionCount} of ${minTransactions} required transactions).`
+    );
+  }
+
+  // ── 6. Triggered rules ──────────────────────────────────────────────────
   const triggeredRules: TriggeredRule[] = [];
   const negativeCashflow = totalOutflow >= totalInflow;
-  const insufficientMonths = monthCount < minMonths;
-  const insufficientActivity = transactionCount < minTransactions;
   const highlyIrregular = (cv !== null && cv >= HIGH_IRREGULARITY_CV) || irregularityScore >= 25;
   const veryHighlyIrregular = irregularityScore >= 35;
 
-  // Gate 1 — negative cashflow
+  // Hard gate 1 — negative cashflow
   if (negativeCashflow) {
     triggeredRules.push({
       rule: "NEGATIVE_CASHFLOW",
@@ -345,23 +372,23 @@ export function computeScorecard(
     });
   }
 
-  // Gate 2 — insufficient data
-  if (insufficientMonths) {
+  // Confidence warnings — do not affect verdict
+  if (!meetsMonths) {
     triggeredRules.push({
       rule: "INSUFFICIENT_MONTHS",
-      effect: "cap-review",
-      description: `Only ${monthCount} month(s) of inflow data found; minimum required is ${minMonths}.`,
+      effect: "confidence-warning",
+      description: `Only ${monthCount} month(s) of inflow data found; minimum recommended is ${minMonths}. Score calculated from available data.`,
     });
   }
-  if (insufficientActivity) {
+  if (!meetsTxn) {
     triggeredRules.push({
       rule: "INSUFFICIENT_TRANSACTIONS",
-      effect: "cap-review",
-      description: `Only ${transactionCount} transaction(s) found; minimum required is ${minTransactions}.`,
+      effect: "confidence-warning",
+      description: `Only ${transactionCount} transaction(s) found; minimum recommended is ${minTransactions}. Score calculated from available data.`,
     });
   }
 
-  // Gate 3 — highly irregular income
+  // Hard gate 2 — critically irregular income
   if (highlyIrregular) {
     triggeredRules.push({
       rule: "HIGH_IRREGULARITY",
@@ -371,7 +398,7 @@ export function computeScorecard(
   }
 
   // Score-based rules
-  if (!negativeCashflow && !highlyIrregular && !insufficientMonths && !insufficientActivity) {
+  if (!negativeCashflow && !highlyIrregular) {
     if (totalScore >= passThreshold) {
       triggeredRules.push({
         rule: "SCORE_PASS",
@@ -393,9 +420,13 @@ export function computeScorecard(
     }
   }
 
-  // ── 6. Final decision ───────────────────────────────────────────────────
+  // ── 7. Final decision ───────────────────────────────────────────────────
   let status: "PASS" | "REVIEW" | "FAIL";
   let statusReason: string;
+
+  const confidenceNote = confidence !== "HIGH"
+    ? ` (${confidence} confidence — ${confidenceReasons[0] ?? "limited data"})`
+    : "";
 
   if (negativeCashflow) {
     status = "FAIL";
@@ -403,22 +434,18 @@ export function computeScorecard(
   } else if (veryHighlyIrregular) {
     status = "FAIL";
     statusReason = `Income is critically irregular. Irregularity penalty: ${irregularityScore} pts. ${irregularityFlags.join("; ")}.`;
-  } else if (insufficientMonths || insufficientActivity || highlyIrregular) {
+  } else if (highlyIrregular) {
     status = "REVIEW";
-    const reasons: string[] = [];
-    if (insufficientMonths) reasons.push(`insufficient monthly history (${monthCount}/${minMonths} months)`);
-    if (insufficientActivity) reasons.push(`insufficient transactions (${transactionCount}/${minTransactions})`);
-    if (highlyIrregular) reasons.push("highly irregular income pattern");
-    statusReason = `Insufficient data for full assessment — ${reasons.join(", ")}.`;
+    statusReason = `Highly irregular income pattern requires manual review. ${irregularityFlags.join("; ")}.${confidenceNote}`;
   } else if (totalScore >= passThreshold) {
     status = "PASS";
-    statusReason = `Score ${totalScore}/100 meets the pass threshold (${passThreshold}). ${cfLabel}, ${actLabel.toLowerCase()}, and ${conLabel.toLowerCase()}.`;
+    statusReason = `Score ${totalScore}/100 meets the pass threshold (${passThreshold}). ${cfLabel}, ${actLabel.toLowerCase()}, and ${conLabel.toLowerCase()}.${confidenceNote}`;
   } else if (totalScore >= reviewThreshold) {
     status = "REVIEW";
-    statusReason = `Score ${totalScore}/100 is above the review threshold but below pass. ${conLabel}.${irregularityFlags.length > 0 ? " " + irregularityFlags[0] : ""}`;
+    statusReason = `Score ${totalScore}/100 is below the pass threshold. ${conLabel}.${confidenceNote}`;
   } else {
     status = "FAIL";
-    statusReason = `Score ${totalScore}/100 is below the review threshold (${reviewThreshold}). Insufficient creditworthiness indicators.`;
+    statusReason = `Score ${totalScore}/100 is below the review threshold (${reviewThreshold}).${confidenceNote}`;
   }
 
   const configSnapshot: ConfigSnapshot = {
@@ -439,9 +466,12 @@ export function computeScorecard(
       totalScore,
       maxScore: 100,
       statusReason,
+      confidence,
+      confidenceReasons,
       triggeredRules,
       configSnapshot,
     },
     status,
+    confidence,
   };
 }

@@ -14,6 +14,27 @@ import {
 } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 
+/** Back-fill legacy scorecard JSONB that predates the confidence layer. */
+function backfillScorecard(sc: unknown, confidence: string): unknown {
+  if (!sc || typeof sc !== "object") return sc;
+  const scorecard = sc as Record<string, unknown>;
+  if (!scorecard.confidence) scorecard.confidence = confidence;
+  if (!scorecard.confidenceReasons) scorecard.confidenceReasons = [];
+  // Migrate old "cap-review" effects on insufficient-data rules to "confidence-warning"
+  if (Array.isArray(scorecard.triggeredRules)) {
+    scorecard.triggeredRules = (scorecard.triggeredRules as any[]).map((r) => {
+      if (
+        r.effect === "cap-review" &&
+        (r.rule === "INSUFFICIENT_MONTHS" || r.rule === "INSUFFICIENT_TRANSACTIONS")
+      ) {
+        return { ...r, effect: "confidence-warning" };
+      }
+      return r;
+    });
+  }
+  return scorecard;
+}
+
 const router: IRouter = Router();
 
 const ACCEPTED_EXTENSIONS = [".xlsx", ".xls", ".csv"];
@@ -42,7 +63,7 @@ const upload = multer({
   },
 });
 
-/* POST /assessments/upload — upload Excel or CSV, score, persist */
+/* POST /assessments/upload */
 router.post(
   "/assessments/upload",
   requireAuth,
@@ -65,13 +86,10 @@ router.post(
   },
   async (req, res): Promise<void> => {
     if (!req.file) {
-      res.status(400).json({
-        error: "No file received. Send the file under the field name 'file'.",
-      });
+      res.status(400).json({ error: "No file received. Send the file under the field name 'file'." });
       return;
     }
 
-    // 1. Parse the spreadsheet / CSV
     let parseResult;
     try {
       parseResult = parseFile(req.file.buffer, req.file.originalname);
@@ -86,11 +104,10 @@ router.post(
 
     const { totalInflow, totalOutflow, transactionCount, rows } = parseResult;
 
-    // 2. Load current config from DB (so settings changes take effect immediately)
+    // Load live config from DB so settings changes take effect immediately
     const config = await getOrCreateConfig();
 
-    // 3. Run the multi-factor scoring engine with live config
-    const { scorecard, status } = computeScorecard(
+    const { scorecard, status, confidence } = computeScorecard(
       totalInflow,
       totalOutflow,
       transactionCount,
@@ -98,7 +115,6 @@ router.post(
       config
     );
 
-    // 4. Persist to database
     const userId = (req as any).userId as number;
     try {
       const [assessment] = await db
@@ -110,23 +126,20 @@ router.post(
           totalOutflow,
           transactionCount,
           status,
+          confidence,
           scorecard,
         })
         .returning();
 
-      res.status(201).json(
-        GetAssessmentResponse.parse({ ...assessment, scorecard })
-      );
+      res.status(201).json(GetAssessmentResponse.parse({ ...assessment, scorecard }));
     } catch (err) {
       logger.error({ err }, "Failed to save assessment");
-      res.status(500).json({
-        error: "Assessment processed but could not be saved. Please try again.",
-      });
+      res.status(500).json({ error: "Assessment processed but could not be saved. Please try again." });
     }
   }
 );
 
-/* GET /assessments — list assessments for current user */
+/* GET /assessments */
 router.get("/assessments", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as number;
   const rows = await db
@@ -138,7 +151,7 @@ router.get("/assessments", requireAuth, async (req, res): Promise<void> => {
   res.json(ListAssessmentsResponse.parse(rows));
 });
 
-/* GET /assessments/summary — dashboard summary cards */
+/* GET /assessments/summary */
 router.get("/assessments/summary", requireAuth, async (req, res): Promise<void> => {
   const userId = (req as any).userId as number;
   const all = await db
@@ -151,14 +164,14 @@ router.get("/assessments/summary", requireAuth, async (req, res): Promise<void> 
     GetAssessmentSummaryResponse.parse({
       totalAssessments: all.length,
       latestAssessment: all[0] ?? null,
-      passCount:    all.filter((a) => a.status === "PASS").length,
-      reviewCount:  all.filter((a) => a.status === "REVIEW").length,
-      failCount:    all.filter((a) => a.status === "FAIL").length,
+      passCount:   all.filter((a) => a.status === "PASS").length,
+      reviewCount: all.filter((a) => a.status === "REVIEW").length,
+      failCount:   all.filter((a) => a.status === "FAIL").length,
     })
   );
 });
 
-/* GET /assessments/:id — single assessment with scorecard */
+/* GET /assessments/:id */
 router.get("/assessments/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetAssessmentParams.safeParse(req.params);
   if (!params.success) {
@@ -170,19 +183,19 @@ router.get("/assessments/:id", requireAuth, async (req, res): Promise<void> => {
   const [assessment] = await db
     .select()
     .from(assessmentsTable)
-    .where(
-      and(
-        eq(assessmentsTable.id, params.data.id),
-        eq(assessmentsTable.userId, userId)
-      )
-    );
+    .where(and(eq(assessmentsTable.id, params.data.id), eq(assessmentsTable.userId, userId)));
 
   if (!assessment) {
     res.status(404).json({ error: "Assessment not found." });
     return;
   }
 
-  res.json(GetAssessmentResponse.parse(assessment));
+  const patched = {
+    ...assessment,
+    scorecard: backfillScorecard(assessment.scorecard, assessment.confidence),
+  };
+
+  res.json(GetAssessmentResponse.parse(patched));
 });
 
 export default router;

@@ -16,6 +16,8 @@ import {
   Loader2,
   ShieldAlert,
   Settings,
+  ShieldCheck,
+  ShieldX,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -142,6 +144,36 @@ export default function AdminPage() {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Fail</p>
             </div>
             <p className="text-2xl font-bold text-red-600">{stats.failCount}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Confidence Stats */}
+      {!loadingStats && stats && (
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-card border border-card-border rounded-xl p-4" data-testid="admin-stat-high-confidence">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldCheck className="h-4 w-4 text-green-500" />
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">High Confidence</p>
+            </div>
+            <p className="text-2xl font-bold text-green-600">{(stats as any).highConfidenceCount ?? 0}</p>
+            <p className="text-xs text-muted-foreground mt-1">Met all data requirements</p>
+          </div>
+          <div className="bg-card border border-card-border rounded-xl p-4" data-testid="admin-stat-medium-confidence">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldAlert className="h-4 w-4 text-amber-500" />
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Medium Confidence</p>
+            </div>
+            <p className="text-2xl font-bold text-amber-600">{(stats as any).mediumConfidenceCount ?? 0}</p>
+            <p className="text-xs text-muted-foreground mt-1">Met one data requirement</p>
+          </div>
+          <div className="bg-card border border-card-border rounded-xl p-4" data-testid="admin-stat-low-confidence">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldX className="h-4 w-4 text-red-500" />
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Low Confidence</p>
+            </div>
+            <p className="text-2xl font-bold text-red-600">{(stats as any).lowConfidenceCount ?? 0}</p>
+            <p className="text-xs text-muted-foreground mt-1">Met no data requirements</p>
           </div>
         </div>
       )}

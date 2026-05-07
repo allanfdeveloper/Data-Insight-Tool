@@ -73,6 +73,11 @@ export const ListAssessmentsResponseItem = zod.object({
   totalOutflow: zod.number(),
   transactionCount: zod.number(),
   status: zod.enum(["PASS", "REVIEW", "FAIL"]),
+  confidence: zod
+    .enum(["HIGH", "MEDIUM", "LOW"])
+    .describe(
+      "Confidence level of the assessment based on data sufficiency. HIGH = meets both minimum months and transaction requirements. MEDIUM = meets only one requirement. LOW = meets neither requirement.\n",
+    ),
   createdAt: zod.coerce.date(),
 });
 export const ListAssessmentsResponse = zod.array(ListAssessmentsResponseItem);
@@ -100,6 +105,11 @@ export const GetAssessmentResponse = zod
     totalOutflow: zod.number(),
     transactionCount: zod.number(),
     status: zod.enum(["PASS", "REVIEW", "FAIL"]),
+    confidence: zod
+      .enum(["HIGH", "MEDIUM", "LOW"])
+      .describe(
+        "Confidence level of the assessment based on data sufficiency. HIGH = meets both minimum months and transaction requirements. MEDIUM = meets only one requirement. LOW = meets neither requirement.\n",
+      ),
     createdAt: zod.coerce.date(),
   })
   .and(
@@ -215,6 +225,16 @@ export const GetAssessmentResponse = zod
           statusReason: zod
             .string()
             .describe("Plain-English explanation of the final decision"),
+          confidence: zod
+            .enum(["HIGH", "MEDIUM", "LOW"])
+            .describe(
+              "Confidence level of the assessment based on data sufficiency. HIGH = meets both minimum months and transaction requirements. MEDIUM = meets only one requirement. LOW = meets neither requirement.\n",
+            ),
+          confidenceReasons: zod
+            .array(zod.string())
+            .describe(
+              "Explanations for why confidence is reduced (empty when HIGH)",
+            ),
           triggeredRules: zod
             .array(
               zod
@@ -228,6 +248,7 @@ export const GetAssessmentResponse = zod
                       "cap-review",
                       "score-penalty",
                       "passed",
+                      "confidence-warning",
                     ])
                     .describe("How this rule affected the verdict"),
                   description: zod
@@ -270,6 +291,11 @@ export const GetAssessmentSummaryResponse = zod.object({
       totalOutflow: zod.number(),
       transactionCount: zod.number(),
       status: zod.enum(["PASS", "REVIEW", "FAIL"]),
+      confidence: zod
+        .enum(["HIGH", "MEDIUM", "LOW"])
+        .describe(
+          "Confidence level of the assessment based on data sufficiency. HIGH = meets both minimum months and transaction requirements. MEDIUM = meets only one requirement. LOW = meets neither requirement.\n",
+        ),
       createdAt: zod.coerce.date(),
     })
     .optional(),
@@ -296,6 +322,11 @@ export const AdminListUsersResponseItem = zod.object({
       totalOutflow: zod.number(),
       transactionCount: zod.number(),
       status: zod.enum(["PASS", "REVIEW", "FAIL"]),
+      confidence: zod
+        .enum(["HIGH", "MEDIUM", "LOW"])
+        .describe(
+          "Confidence level of the assessment based on data sufficiency. HIGH = meets both minimum months and transaction requirements. MEDIUM = meets only one requirement. LOW = meets neither requirement.\n",
+        ),
       createdAt: zod.coerce.date(),
     })
     .optional(),
@@ -311,6 +342,9 @@ export const AdminGetStatsResponse = zod.object({
   passCount: zod.number(),
   reviewCount: zod.number(),
   failCount: zod.number(),
+  highConfidenceCount: zod.number(),
+  mediumConfidenceCount: zod.number(),
+  lowConfidenceCount: zod.number(),
 });
 
 /**

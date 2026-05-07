@@ -489,6 +489,15 @@ components:
     # ---------------------------------------------------------------
     # Scorecard — the multi-factor decision breakdown
     # ---------------------------------------------------------------
+    AssessmentConfidence:
+      type: string
+      enum: [HIGH, MEDIUM, LOW]
+      description: >
+        Confidence level of the assessment based on data sufficiency.
+        HIGH = meets both minimum months and transaction requirements.
+        MEDIUM = meets only one requirement.
+        LOW = meets neither requirement.
+
     TriggeredRule:
       type: object
       description: A rule that affected the final assessment decision
@@ -498,7 +507,7 @@ components:
           description: Machine-readable rule identifier
         effect:
           type: string
-          enum: [auto-fail, cap-review, score-penalty, passed]
+          enum: [auto-fail, cap-review, score-penalty, passed, confidence-warning]
           description: How this rule affected the verdict
         description:
           type: string
@@ -601,6 +610,13 @@ components:
         statusReason:
           type: string
           description: Plain-English explanation of the final decision
+        confidence:
+          $ref: "#/components/schemas/AssessmentConfidence"
+        confidenceReasons:
+          type: array
+          items:
+            type: string
+          description: Explanations for why confidence is reduced (empty when HIGH)
         triggeredRules:
           type: array
           items:
@@ -639,6 +655,8 @@ components:
         - totalScore
         - maxScore
         - statusReason
+        - confidence
+        - confidenceReasons
         - triggeredRules
         - configSnapshot
 
@@ -660,6 +678,8 @@ components:
         status:
           type: string
           enum: [PASS, REVIEW, FAIL]
+        confidence:
+          $ref: "#/components/schemas/AssessmentConfidence"
         createdAt:
           type: string
           format: date-time
@@ -671,6 +691,7 @@ components:
         - totalOutflow
         - transactionCount
         - status
+        - confidence
         - createdAt
 
     # AssessmentDetail = Assessment + scorecard (returned by upload + GET /id)
@@ -737,9 +758,18 @@ components:
           type: integer
         failCount:
           type: integer
+        highConfidenceCount:
+          type: integer
+        mediumConfidenceCount:
+          type: integer
+        lowConfidenceCount:
+          type: integer
       required:
         - totalUsers
         - totalAssessments
         - passCount
         - reviewCount
         - failCount
+        - highConfidenceCount
+        - mediumConfidenceCount
+        - lowConfidenceCount
