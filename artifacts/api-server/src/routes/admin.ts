@@ -35,7 +35,15 @@ export async function getOrCreateConfig(): Promise<AssessmentEngineConfig & { id
 
   const [inserted] = await db
     .insert(assessmentConfigTable)
-    .values({})
+    .values({
+      minMonths: 3,
+      minTransactions: 10,
+      passThreshold: 65,
+      reviewThreshold: 40,
+      cashflowWeight: 40,
+      activityWeight: 30,
+      consistencyWeight: 30,
+    })
     .returning();
   return inserted as any;
 }

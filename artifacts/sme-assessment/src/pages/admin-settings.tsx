@@ -143,14 +143,14 @@ function NumberInput({
   );
 }
 
-const DEFAULTS = {
+const DEFAULTS: FormState = {
   minMonths: 3,
   minTransactions: 10,
-  passThreshold: 72,
+  passThreshold: 65,
   reviewThreshold: 40,
-  cashflowWeight: 20,
-  activityWeight: 35,
-  consistencyWeight: 45,
+  cashflowWeight: 40,
+  activityWeight: 30,
+  consistencyWeight: 30,
 };
 
 export default function AdminSettingsPage() {
