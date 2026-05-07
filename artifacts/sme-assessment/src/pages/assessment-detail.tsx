@@ -1,39 +1,54 @@
 import { Link, useParams } from "wouter";
-import {
-  useGetAssessment,
-  getGetAssessmentQueryKey,
-} from "@workspace/api-client-react";
+import { useGetAssessment, getGetAssessmentQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import {
-  ArrowLeft,
-  CheckCircle2,
-  AlertCircle,
-  XCircle,
-  Loader2,
-  TrendingUp,
-  TrendingDown,
-  Hash,
-  Calendar,
-  FileSpreadsheet,
-  Activity,
-  BarChart3,
-  RefreshCw,
-  AlertTriangle,
-  ShieldX,
-  ShieldCheck,
-  ShieldAlert,
-  Info,
+  ArrowLeft, CheckCircle2, AlertCircle, XCircle, Loader2,
+  TrendingUp, TrendingDown, Hash, Calendar, FileSpreadsheet,
+  Activity, BarChart3, RefreshCw, AlertTriangle, ShieldX,
+  ShieldCheck, ShieldAlert, Info, ArrowUpRight, ArrowDownRight,
+  Minus, TrendingUp as TrendUp, Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Bar,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ReferenceLine,
+  CartesianGrid,
+  Legend,
+} from "recharts";
 
 // ---------- Types ----------
 
 type Confidence = "HIGH" | "MEDIUM" | "LOW";
+type TrendClassification = "POSITIVE" | "STABLE" | "NEGATIVE";
+
+interface MonthlyDataPoint {
+  month: string;
+  inflow: number;
+  outflow: number;
+  net: number;
+}
+
+interface TrendAnalysisData {
+  monthlyData: MonthlyDataPoint[];
+  classification: TrendClassification;
+  inflowTrend: "increasing" | "stable" | "declining";
+  outflowTrend: "increasing" | "stable" | "declining";
+  netTrend: "improving" | "stable" | "deteriorating";
+  volatility: "low" | "moderate" | "high";
+  trendScore: number;
+  explanations: string[];
+}
 
 interface TriggeredRule {
   rule: string;
-  effect: "auto-fail" | "cap-review" | "score-penalty" | "passed" | "confidence-warning";
+  effect: "auto-fail" | "cap-review" | "score-penalty" | "score-bonus" | "passed" | "confidence-warning";
   description: string;
 }
 
@@ -59,6 +74,7 @@ interface ScorecardData {
   statusReason: string;
   confidence: Confidence;
   confidenceReasons: string[];
+  trendAnalysis?: TrendAnalysisData;
   triggeredRules: TriggeredRule[];
   configSnapshot?: {
     passThreshold: number;
@@ -73,20 +89,17 @@ interface ScorecardData {
 
 // ---------- Helpers ----------
 
-function StatusBadge({ status }: { status: string }) {
-  if (status === "PASS")
-    return <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 text-sm px-3 py-1"><CheckCircle2 className="h-4 w-4 mr-1.5" /> PASS</Badge>;
-  if (status === "REVIEW")
-    return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 text-sm px-3 py-1"><AlertCircle className="h-4 w-4 mr-1.5" /> REVIEW</Badge>;
-  return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 text-sm px-3 py-1"><XCircle className="h-4 w-4 mr-1.5" /> FAIL</Badge>;
+function formatMonth(m: string): string {
+  const [year, month] = m.split("-");
+  const d = new Date(Number(year), Number(month) - 1, 1);
+  return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
 }
 
-function ConfidenceBadge({ confidence }: { confidence?: Confidence }) {
-  if (!confidence || confidence === "HIGH")
-    return <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 text-sm px-3 py-1"><ShieldCheck className="h-4 w-4 mr-1.5" /> HIGH Confidence</Badge>;
-  if (confidence === "MEDIUM")
-    return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 text-sm px-3 py-1"><ShieldAlert className="h-4 w-4 mr-1.5" /> MEDIUM Confidence</Badge>;
-  return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 text-sm px-3 py-1"><ShieldX className="h-4 w-4 mr-1.5" /> LOW Confidence</Badge>;
+function formatK(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
+  return `$${n.toFixed(0)}`;
 }
 
 function formatCurrency(n: number) {
@@ -103,6 +116,55 @@ function formatPct(n: number) {
   return (n * 100).toFixed(1) + "%";
 }
 
+// ---------- Small UI pieces ----------
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "PASS")
+    return <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 text-sm px-3 py-1"><CheckCircle2 className="h-4 w-4 mr-1.5" />PASS</Badge>;
+  if (status === "REVIEW")
+    return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 text-sm px-3 py-1"><AlertCircle className="h-4 w-4 mr-1.5" />REVIEW</Badge>;
+  return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 text-sm px-3 py-1"><XCircle className="h-4 w-4 mr-1.5" />FAIL</Badge>;
+}
+
+function ConfidenceBadge({ confidence }: { confidence?: Confidence }) {
+  if (!confidence || confidence === "HIGH")
+    return <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 text-sm px-3 py-1"><ShieldCheck className="h-4 w-4 mr-1.5" />HIGH Confidence</Badge>;
+  if (confidence === "MEDIUM")
+    return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 text-sm px-3 py-1"><ShieldAlert className="h-4 w-4 mr-1.5" />MEDIUM Confidence</Badge>;
+  return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 text-sm px-3 py-1"><ShieldX className="h-4 w-4 mr-1.5" />LOW Confidence</Badge>;
+}
+
+function TrendBadge({ classification }: { classification?: TrendClassification }) {
+  if (classification === "POSITIVE")
+    return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100 text-sm px-3 py-1"><TrendingUp className="h-4 w-4 mr-1.5" />POSITIVE Trend</Badge>;
+  if (classification === "NEGATIVE")
+    return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 text-sm px-3 py-1"><TrendingDown className="h-4 w-4 mr-1.5" />NEGATIVE Trend</Badge>;
+  return <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-100 text-sm px-3 py-1"><Minus className="h-4 w-4 mr-1.5" />STABLE Trend</Badge>;
+}
+
+function DirectionPill({ label, value }: { label: string; value: string }) {
+  const isPositive = value === "increasing" || value === "improving" || value === "declining" && label === "Outflows";
+  const isNegative = value === "declining" && label !== "Outflows" || value === "deteriorating" || value === "increasing" && label === "Outflows";
+  const icon =
+    value === "increasing" || value === "improving" ? <ArrowUpRight className="h-3 w-3" /> :
+    value === "declining" || value === "deteriorating" ? <ArrowDownRight className="h-3 w-3" /> :
+    <Minus className="h-3 w-3" />;
+  const color =
+    label === "Outflows"
+      ? value === "declining" ? "text-green-700 bg-green-50 border-green-200"
+        : value === "increasing" ? "text-red-700 bg-red-50 border-red-200"
+        : "text-slate-600 bg-slate-50 border-slate-200"
+      : isPositive ? "text-green-700 bg-green-50 border-green-200"
+      : isNegative ? "text-red-700 bg-red-50 border-red-200"
+      : "text-slate-600 bg-slate-50 border-slate-200";
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${color}`}>
+      {icon} {label}: {value}
+    </span>
+  );
+}
+
 function ScoreBar({ score, maxScore, color }: { score: number; maxScore: number; color: string }) {
   const pct = Math.max(0, Math.min(100, (score / maxScore) * 100));
   return (
@@ -116,7 +178,8 @@ function FactorCard({
   icon, title, score, maxScore, label, barColor, weight, normalizedScore, children,
 }: {
   icon: React.ReactNode; title: string; score: number; maxScore: number;
-  label: string; barColor: string; weight: number; normalizedScore: number; children?: React.ReactNode;
+  label: string; barColor: string; weight: number; normalizedScore: number;
+  children?: React.ReactNode;
 }) {
   return (
     <div className="bg-card border border-card-border rounded-xl p-5">
@@ -136,21 +199,22 @@ function FactorCard({
 
 function RuleChip({ rule }: { rule: TriggeredRule }) {
   const styles: Record<string, { bg: string; icon: React.ReactNode }> = {
-    "auto-fail":          { bg: "bg-red-50 border-red-200 text-red-800",     icon: <ShieldX className="h-3.5 w-3.5 shrink-0 text-red-500" /> },
+    "auto-fail":          { bg: "bg-red-50 border-red-200 text-red-800",       icon: <ShieldX className="h-3.5 w-3.5 shrink-0 text-red-500" /> },
     "cap-review":         { bg: "bg-amber-50 border-amber-200 text-amber-800", icon: <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-amber-500" /> },
-    "score-penalty":      { bg: "bg-orange-50 border-orange-200 text-orange-800", icon: <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-orange-500" /> },
+    "score-penalty":      { bg: "bg-orange-50 border-orange-200 text-orange-800", icon: <TrendingDown className="h-3.5 w-3.5 shrink-0 text-orange-500" /> },
+    "score-bonus":        { bg: "bg-emerald-50 border-emerald-200 text-emerald-800", icon: <TrendingUp className="h-3.5 w-3.5 shrink-0 text-emerald-500" /> },
     "passed":             { bg: "bg-green-50 border-green-200 text-green-800", icon: <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-green-500" /> },
-    "confidence-warning": { bg: "bg-blue-50 border-blue-200 text-blue-800",  icon: <Info className="h-3.5 w-3.5 shrink-0 text-blue-500" /> },
+    "confidence-warning": { bg: "bg-blue-50 border-blue-200 text-blue-800",   icon: <Info className="h-3.5 w-3.5 shrink-0 text-blue-500" /> },
   };
   const s = styles[rule.effect] ?? styles["cap-review"];
   const effectLabel: Record<string, string> = {
     "auto-fail":          "Auto-Fail",
     "cap-review":         "Capped to Review",
     "score-penalty":      "Score Penalty",
+    "score-bonus":        "Score Bonus",
     "passed":             "Passed",
     "confidence-warning": "Confidence Warning",
   };
-
   return (
     <div className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 ${s.bg}`}>
       {s.icon}
@@ -158,6 +222,142 @@ function RuleChip({ rule }: { rule: TriggeredRule }) {
         <span className="text-[10px] font-semibold uppercase tracking-wide block mb-0.5 opacity-70">{effectLabel[rule.effect] ?? rule.effect}</span>
         <p className="text-xs leading-relaxed">{rule.description}</p>
       </div>
+    </div>
+  );
+}
+
+// Custom chart tooltip
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-card border border-card-border rounded-lg px-3 py-2 text-xs shadow-lg">
+      <p className="font-semibold text-foreground mb-1.5">{label}</p>
+      {payload.map((p: any) => (
+        <div key={p.dataKey} className="flex items-center gap-2 mb-0.5">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
+          <span className="text-muted-foreground capitalize">{p.name}:</span>
+          <span className="font-medium" style={{ color: p.color }}>{formatK(p.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------- Trend Section ----------
+
+function TrendSection({ trend }: { trend: TrendAnalysisData }) {
+  const chartData = trend.monthlyData.map((m) => ({
+    ...m,
+    label: formatMonth(m.month),
+  }));
+
+  const hasData = chartData.length >= 2;
+
+  const trendColors = {
+    POSITIVE: { bg: "bg-emerald-50", border: "border-emerald-200", icon: <TrendingUp className="h-4 w-4 text-emerald-600" /> },
+    STABLE:   { bg: "bg-slate-50",   border: "border-slate-200",   icon: <Minus className="h-4 w-4 text-slate-500" /> },
+    NEGATIVE: { bg: "bg-red-50",     border: "border-red-200",     icon: <TrendingDown className="h-4 w-4 text-red-600" /> },
+  };
+  const tc = trendColors[trend.classification];
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+        <Zap className="h-4 w-4 text-amber-500" />
+        Trend Intelligence
+      </h2>
+
+      {/* Classification banner */}
+      <div className={`rounded-xl px-5 py-4 mb-4 border ${tc.bg} ${tc.border}`}>
+        <div className="flex items-start gap-3">
+          <div className="shrink-0 mt-0.5">{tc.icon}</div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Trend Classification</p>
+              <TrendBadge classification={trend.classification} />
+              {trend.trendScore !== 0 && (
+                <span className={`text-xs font-semibold ${trend.trendScore > 0 ? "text-emerald-700" : "text-red-700"}`}>
+                  {trend.trendScore > 0 ? `+${trend.trendScore}` : trend.trendScore} pts applied
+                </span>
+              )}
+            </div>
+            {/* Direction pills */}
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              <DirectionPill label="Inflows"    value={trend.inflowTrend} />
+              <DirectionPill label="Outflows"   value={trend.outflowTrend} />
+              <DirectionPill label="Net"        value={trend.netTrend} />
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${
+                trend.volatility === "high"     ? "text-red-700 bg-red-50 border-red-200" :
+                trend.volatility === "moderate" ? "text-amber-700 bg-amber-50 border-amber-200" :
+                                                  "text-green-700 bg-green-50 border-green-200"
+              }`}>
+                <Activity className="h-3 w-3" /> Volatility: {trend.volatility}
+              </span>
+            </div>
+            {/* Explanations */}
+            <ul className="space-y-1">
+              {trend.explanations.map((e, i) => (
+                <li key={i} className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
+                  <span className="mt-1.5 h-1 w-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                  {e}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts */}
+      {hasData ? (
+        <div className="space-y-4">
+          {/* Combined inflow / outflow bar chart */}
+          <div className="bg-card border border-card-border rounded-xl p-5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">Monthly Inflows vs Outflows</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                <YAxis tickFormatter={formatK} tick={{ fontSize: 10 }} width={52} />
+                <Tooltip content={<ChartTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="inflow"  name="Inflow"  fill="#10b981" opacity={0.85} radius={[3,3,0,0]} />
+                <Bar dataKey="outflow" name="Outflow" fill="#f87171" opacity={0.85} radius={[3,3,0,0]} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Net cashflow line chart */}
+          <div className="bg-card border border-card-border rounded-xl p-5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">Monthly Net Cashflow Trend</p>
+            <ResponsiveContainer width="100%" height={180}>
+              <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                <YAxis tickFormatter={formatK} tick={{ fontSize: 10 }} width={52} />
+                <Tooltip content={<ChartTooltip />} />
+                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 2" />
+                <Bar dataKey="net" name="Net" radius={[3,3,0,0]}
+                  fill="#6366f1"
+                  opacity={0.7}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="net"
+                  name="Net trend"
+                  stroke={trend.classification === "POSITIVE" ? "#10b981" : trend.classification === "NEGATIVE" ? "#ef4444" : "#64748b"}
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "white", strokeWidth: 2 }}
+                  activeDot={{ r: 5 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-card border border-card-border rounded-xl p-8 text-center text-muted-foreground text-sm">
+          Not enough monthly data to render trend charts (minimum 2 months required).
+        </div>
+      )}
     </div>
   );
 }
@@ -174,6 +374,7 @@ export default function AssessmentDetailPage() {
 
   const sc = (assessment as any)?.scorecard as ScorecardData | null | undefined;
   const confidence: Confidence | undefined = (assessment as any)?.confidence ?? sc?.confidence;
+  const trend = sc?.trendAnalysis;
 
   return (
     <Layout>
@@ -195,7 +396,7 @@ export default function AssessmentDetailPage() {
 
       {assessment && (
         <>
-          {/* ── Status + Confidence banner ──────────────────────────────── */}
+          {/* ── Status banner ───────────────────────────────────────── */}
           <div
             className={`rounded-xl p-5 mb-4 border ${
               assessment.status === "PASS" ? "bg-green-50 border-green-200"
@@ -219,10 +420,10 @@ export default function AssessmentDetailPage() {
             {sc && <p className="text-xs text-muted-foreground mt-3 leading-relaxed">{sc.statusReason}</p>}
           </div>
 
-          {/* ── Confidence banner ───────────────────────────────────────── */}
+          {/* ── Confidence banner ────────────────────────────────────── */}
           {confidence && (
             <div
-              className={`rounded-xl px-5 py-3.5 mb-6 border flex items-start gap-3 ${
+              className={`rounded-xl px-5 py-3.5 mb-4 border flex items-start gap-3 ${
                 confidence === "HIGH"   ? "bg-green-50 border-green-200"
                 : confidence === "MEDIUM" ? "bg-amber-50 border-amber-200"
                 : "bg-red-50 border-red-200"
@@ -238,11 +439,9 @@ export default function AssessmentDetailPage() {
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Assessment Confidence</p>
                   <ConfidenceBadge confidence={confidence} />
                 </div>
-                {sc?.confidenceReasons && sc.confidenceReasons.length > 0 ? (
+                {sc?.confidenceReasons?.length ? (
                   <ul className="mt-1.5 space-y-0.5">
-                    {sc.confidenceReasons.map((r, i) => (
-                      <li key={i} className="text-xs leading-relaxed text-muted-foreground">{r}</li>
-                    ))}
+                    {sc.confidenceReasons.map((r, i) => <li key={i} className="text-xs text-muted-foreground">{r}</li>)}
                   </ul>
                 ) : (
                   <p className="text-xs text-muted-foreground mt-1">All minimum data requirements are met.</p>
@@ -251,7 +450,7 @@ export default function AssessmentDetailPage() {
             </div>
           )}
 
-          {/* ── Key metrics ────────────────────────────────────────────── */}
+          {/* ── Key metrics ──────────────────────────────────────────── */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-card border border-card-border rounded-xl p-5" data-testid="metric-inflow">
               <div className="flex items-center gap-2 mb-2">
@@ -276,7 +475,7 @@ export default function AssessmentDetailPage() {
             </div>
           </div>
 
-          {/* ── Net cash position ──────────────────────────────────────── */}
+          {/* ── Net cash ─────────────────────────────────────────────── */}
           <div className="bg-card border border-card-border rounded-xl p-5 mb-6">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Net Cash Position</p>
             <div className="flex items-baseline gap-2">
@@ -288,7 +487,10 @@ export default function AssessmentDetailPage() {
             {sc && <p className="text-xs text-muted-foreground mt-1">Net ratio: {formatPct(sc.cashflowStrength.netRatio)} of total inflow</p>}
           </div>
 
-          {/* ── Scorecard breakdown ───────────────────────────────────── */}
+          {/* ── Trend Intelligence ───────────────────────────────────── */}
+          {trend && <TrendSection trend={trend} />}
+
+          {/* ── Scorecard breakdown ──────────────────────────────────── */}
           {sc && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
@@ -350,7 +552,14 @@ export default function AssessmentDetailPage() {
               <div className="bg-card border border-card-border rounded-xl p-5 mb-4">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total Score</p>
-                  <span className="text-sm font-bold">{sc.totalScore}<span className="text-muted-foreground font-normal">/{sc.maxScore}</span></span>
+                  <div className="flex items-center gap-3">
+                    {trend && trend.trendScore !== 0 && (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${trend.trendScore > 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                        Trend: {trend.trendScore > 0 ? "+" : ""}{trend.trendScore} pts
+                      </span>
+                    )}
+                    <span className="text-sm font-bold">{sc.totalScore}<span className="text-muted-foreground font-normal">/{sc.maxScore}</span></span>
+                  </div>
                 </div>
                 <div className="h-3 w-full bg-muted rounded-full overflow-hidden">
                   <div
@@ -390,7 +599,7 @@ export default function AssessmentDetailPage() {
             </div>
           )}
 
-          {/* ── File information ──────────────────────────────────────── */}
+          {/* ── File information ─────────────────────────────────────── */}
           <div className="bg-card border border-card-border rounded-xl p-5">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">File Information</p>
             <div className="flex items-center gap-3">

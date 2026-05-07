@@ -20,6 +20,18 @@ function backfillScorecard(sc: unknown, confidence: string): unknown {
   const scorecard = sc as Record<string, unknown>;
   if (!scorecard.confidence) scorecard.confidence = confidence;
   if (!scorecard.confidenceReasons) scorecard.confidenceReasons = [];
+  if (!scorecard.trendAnalysis) {
+    scorecard.trendAnalysis = {
+      monthlyData: [],
+      classification: "STABLE",
+      inflowTrend: "stable",
+      outflowTrend: "stable",
+      netTrend: "stable",
+      volatility: "low",
+      trendScore: 0,
+      explanations: ["Trend analysis not available for this assessment — re-upload to generate trend data."],
+    };
+  }
   // Migrate old "cap-review" effects on insufficient-data rules to "confidence-warning"
   if (Array.isArray(scorecard.triggeredRules)) {
     scorecard.triggeredRules = (scorecard.triggeredRules as any[]).map((r) => {

@@ -4,6 +4,7 @@ import {
   useListAssessments,
   useGetAssessmentSummary,
   useUploadAssessment,
+  useGetAssessment,
   getListAssessmentsQueryKey,
   getGetAssessmentSummaryQueryKey,
 } from "@workspace/api-client-react";
@@ -12,66 +13,52 @@ import { useAuth } from "@/lib/auth";
 import { Layout } from "@/components/layout";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Upload,
-  FileSpreadsheet,
-  TrendingUp,
-  TrendingDown,
-  Activity,
-  ChevronRight,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
-  XCircle,
-  ShieldCheck,
-  ShieldAlert,
-  ShieldX,
+  Upload, FileSpreadsheet, Activity, ChevronRight, Loader2,
+  CheckCircle2, AlertCircle, XCircle, ShieldCheck, ShieldAlert,
+  ShieldX, TrendingUp, TrendingDown, Minus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Bar,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ReferenceLine,
+  CartesianGrid,
+} from "recharts";
+
+// ---------- Badges ----------
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === "PASS") {
-    return (
-      <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100">
-        <CheckCircle2 className="h-3 w-3 mr-1" />PASS
-      </Badge>
-    );
-  }
-  if (status === "REVIEW") {
-    return (
-      <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100">
-        <AlertCircle className="h-3 w-3 mr-1" />REVIEW
-      </Badge>
-    );
-  }
-  return (
-    <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100">
-      <XCircle className="h-3 w-3 mr-1" />FAIL
-    </Badge>
-  );
+  if (status === "PASS")
+    return <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100"><CheckCircle2 className="h-3 w-3 mr-1" />PASS</Badge>;
+  if (status === "REVIEW")
+    return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100"><AlertCircle className="h-3 w-3 mr-1" />REVIEW</Badge>;
+  return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100"><XCircle className="h-3 w-3 mr-1" />FAIL</Badge>;
 }
 
 function ConfidenceBadge({ confidence }: { confidence?: string }) {
-  if (!confidence || confidence === "HIGH") {
-    return (
-      <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 hover:bg-green-50 text-[10px] px-1.5 py-0.5">
-        <ShieldCheck className="h-2.5 w-2.5 mr-1" />HIGH
-      </Badge>
-    );
-  }
-  if (confidence === "MEDIUM") {
-    return (
-      <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 hover:bg-amber-50 text-[10px] px-1.5 py-0.5">
-        <ShieldAlert className="h-2.5 w-2.5 mr-1" />MED
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50 hover:bg-red-50 text-[10px] px-1.5 py-0.5">
-      <ShieldX className="h-2.5 w-2.5 mr-1" />LOW
-    </Badge>
-  );
+  if (!confidence || confidence === "HIGH")
+    return <Badge variant="outline" className="text-green-700 border-green-300 bg-green-50 hover:bg-green-50 text-[10px] px-1.5 py-0.5"><ShieldCheck className="h-2.5 w-2.5 mr-1" />HIGH</Badge>;
+  if (confidence === "MEDIUM")
+    return <Badge variant="outline" className="text-amber-700 border-amber-300 bg-amber-50 hover:bg-amber-50 text-[10px] px-1.5 py-0.5"><ShieldAlert className="h-2.5 w-2.5 mr-1" />MED</Badge>;
+  return <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50 hover:bg-red-50 text-[10px] px-1.5 py-0.5"><ShieldX className="h-2.5 w-2.5 mr-1" />LOW</Badge>;
 }
+
+function TrendBadge({ classification }: { classification?: string }) {
+  if (classification === "POSITIVE")
+    return <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-50 text-[10px] px-1.5 py-0.5"><TrendingUp className="h-2.5 w-2.5 mr-1" />↑</Badge>;
+  if (classification === "NEGATIVE")
+    return <Badge variant="outline" className="text-red-700 border-red-300 bg-red-50 hover:bg-red-50 text-[10px] px-1.5 py-0.5"><TrendingDown className="h-2.5 w-2.5 mr-1" />↓</Badge>;
+  if (!classification) return null;
+  return <Badge variant="outline" className="text-slate-600 border-slate-300 bg-slate-50 hover:bg-slate-50 text-[10px] px-1.5 py-0.5"><Minus className="h-2.5 w-2.5 mr-1" />—</Badge>;
+}
+
+// ---------- Helpers ----------
 
 function formatCurrency(n: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
@@ -80,6 +67,95 @@ function formatCurrency(n: number) {
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
+
+function formatMonth(m: string): string {
+  const [year, month] = m.split("-");
+  const d = new Date(Number(year), Number(month) - 1, 1);
+  return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+}
+
+function formatK(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1)}k`;
+  return `$${n.toFixed(0)}`;
+}
+
+// ---------- Mini trend chart ----------
+
+function MiniTrendChart({ monthlyData, classification }: {
+  monthlyData: Array<{ month: string; inflow: number; outflow: number; net: number }>;
+  classification?: string;
+}) {
+  if (!monthlyData || monthlyData.length < 2) return null;
+
+  const data = monthlyData.map((m) => ({ ...m, label: formatMonth(m.month) }));
+  const lineColor =
+    classification === "POSITIVE" ? "#10b981" :
+    classification === "NEGATIVE" ? "#ef4444" :
+    "#64748b";
+
+  function TipContent({ active, payload, label }: any) {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-card border border-card-border rounded-lg px-2.5 py-1.5 text-xs shadow-md">
+        <p className="font-semibold text-foreground mb-1">{label}</p>
+        <div className="flex items-center gap-1.5 mb-0.5 text-green-600"><span>In:</span><span className="font-medium">{formatK(payload[0]?.value ?? 0)}</span></div>
+        <div className="flex items-center gap-1.5 mb-0.5 text-red-500"><span>Out:</span><span className="font-medium">{formatK(payload[1]?.value ?? 0)}</span></div>
+        <div className="flex items-center gap-1.5" style={{ color: lineColor }}><span>Net:</span><span className="font-medium">{formatK(payload[2]?.value ?? 0)}</span></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-card-border">
+      <p className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-1.5">
+        <Activity className="h-3.5 w-3.5" />
+        Monthly Cashflow Trend
+        {classification && (
+          <span className={`ml-1 font-semibold ${
+            classification === "POSITIVE" ? "text-emerald-600" :
+            classification === "NEGATIVE" ? "text-red-600" :
+            "text-slate-500"
+          }`}>({classification})</span>
+        )}
+      </p>
+
+      {/* Inflow vs Outflow bars */}
+      <div className="mb-3">
+        <p className="text-[10px] text-muted-foreground mb-1.5">Inflows (green) vs Outflows (red)</p>
+        <ResponsiveContainer width="100%" height={100}>
+          <ComposedChart data={data} margin={{ top: 2, right: 4, left: 4, bottom: 2 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
+            <YAxis tickFormatter={formatK} tick={{ fontSize: 9 }} width={40} tickLine={false} axisLine={false} />
+            <Tooltip content={<TipContent />} />
+            <Bar dataKey="inflow"  fill="#10b981" opacity={0.8} radius={[2,2,0,0]} />
+            <Bar dataKey="outflow" fill="#f87171" opacity={0.8} radius={[2,2,0,0]} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Net cashflow line */}
+      <div>
+        <p className="text-[10px] text-muted-foreground mb-1.5">Monthly Net Cashflow</p>
+        <ResponsiveContainer width="100%" height={80}>
+          <ComposedChart data={data} margin={{ top: 2, right: 4, left: 4, bottom: 2 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
+            <YAxis tickFormatter={formatK} tick={{ fontSize: 9 }} width={40} tickLine={false} axisLine={false} />
+            <Tooltip content={<TipContent />} />
+            <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 2" />
+            <Bar dataKey="net" fill="#6366f1" opacity={0.5} radius={[2,2,0,0]} />
+            <Line type="monotone" dataKey="net" stroke={lineColor} strokeWidth={2} dot={{ r: 3, fill: "white", strokeWidth: 2 }} activeDot={{ r: 4 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Page ----------
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -92,6 +168,13 @@ export default function DashboardPage() {
   const { data: summary, isLoading: loadingSummary } = useGetAssessmentSummary();
   const uploadMutation = useUploadAssessment();
 
+  // Fetch full scorecard for the latest assessment (for trend charts)
+  const latestId = (summary?.latestAssessment as any)?.id as number | undefined;
+  const { data: latestDetail } = useGetAssessment(latestId!, {
+    query: { enabled: !!latestId },
+  });
+  const latestTrend = (latestDetail as any)?.scorecard?.trendAnalysis;
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) setSelectedFile(file);
@@ -102,7 +185,6 @@ export default function DashboardPage() {
       toast({ title: "No file selected", description: "Please select a .xlsx, .xls, or .csv file first.", variant: "destructive" });
       return;
     }
-
     uploadMutation.mutate(
       { data: { file: selectedFile } },
       {
@@ -114,7 +196,7 @@ export default function DashboardPage() {
           toast({ title: "Assessment complete", description: "Your file has been processed successfully." });
         },
         onError: (err: any) => {
-          const msg = err?.data?.error ?? err?.data?.message ?? err?.message ?? "Failed to process file. Please try again.";
+          const msg = err?.data?.error ?? err?.data?.message ?? err?.message ?? "Failed to process file.";
           toast({ title: "Upload failed", description: msg, variant: "destructive" });
         },
       }
@@ -150,12 +232,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Latest Assessment */}
+      {/* Latest Assessment + Trend Charts */}
       {summary?.latestAssessment && (
         <div className="bg-card border border-card-border rounded-xl p-5 mb-8">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-foreground">Latest Assessment</h2>
             <div className="flex items-center gap-2">
+              <TrendBadge classification={latestTrend?.classification} />
               <ConfidenceBadge confidence={(summary.latestAssessment as any).confidence} />
               <StatusBadge status={summary.latestAssessment.status} />
             </div>
@@ -177,6 +260,14 @@ export default function DashboardPage() {
           <p className="text-xs text-muted-foreground mt-3">
             {summary.latestAssessment.fileName} &middot; {formatDate(summary.latestAssessment.createdAt)}
           </p>
+
+          {/* Trend charts inline */}
+          {latestTrend?.monthlyData && latestTrend.monthlyData.length >= 2 && (
+            <MiniTrendChart
+              monthlyData={latestTrend.monthlyData}
+              classification={latestTrend.classification}
+            />
+          )}
         </div>
       )}
 
@@ -210,7 +301,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Assessments List */}
+      {/* Assessment History */}
       <div className="bg-card border border-card-border rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-card-border">
           <h2 className="text-sm font-semibold text-foreground">Assessment History</h2>

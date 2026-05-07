@@ -121,6 +121,7 @@ export const TriggeredRuleEffect = {
   "auto-fail": "auto-fail",
   "cap-review": "cap-review",
   "score-penalty": "score-penalty",
+  "score-bonus": "score-bonus",
   passed: "passed",
   "confidence-warning": "confidence-warning",
 } as const;
@@ -172,6 +173,102 @@ export type ConsistencyFactor = ScorecardFactor & {
 };
 
 /**
+ * Aggregated cashflow data for a single calendar month
+ */
+export interface MonthlyDataPoint {
+  /** Calendar month in YYYY-MM format */
+  month: string;
+  /** Total inflows recorded in this month */
+  inflow: number;
+  /** Total outflows recorded in this month */
+  outflow: number;
+  /** Net cashflow for this month (inflow - outflow) */
+  net: number;
+}
+
+/**
+ * Overall directional trend classification based on cashflow trajectory. POSITIVE = cashflow is improving over the assessment period. STABLE = no significant directional movement detected. NEGATIVE = cashflow is deteriorating over the assessment period.
+
+ */
+export type TrendClassification =
+  (typeof TrendClassification)[keyof typeof TrendClassification];
+
+export const TrendClassification = {
+  POSITIVE: "POSITIVE",
+  STABLE: "STABLE",
+  NEGATIVE: "NEGATIVE",
+} as const;
+
+/**
+ * Directional movement of monthly total inflows
+ */
+export type TrendAnalysisInflowTrend =
+  (typeof TrendAnalysisInflowTrend)[keyof typeof TrendAnalysisInflowTrend];
+
+export const TrendAnalysisInflowTrend = {
+  increasing: "increasing",
+  stable: "stable",
+  declining: "declining",
+} as const;
+
+/**
+ * Directional movement of monthly total outflows
+ */
+export type TrendAnalysisOutflowTrend =
+  (typeof TrendAnalysisOutflowTrend)[keyof typeof TrendAnalysisOutflowTrend];
+
+export const TrendAnalysisOutflowTrend = {
+  increasing: "increasing",
+  stable: "stable",
+  declining: "declining",
+} as const;
+
+/**
+ * Directional movement of monthly net cashflow
+ */
+export type TrendAnalysisNetTrend =
+  (typeof TrendAnalysisNetTrend)[keyof typeof TrendAnalysisNetTrend];
+
+export const TrendAnalysisNetTrend = {
+  improving: "improving",
+  stable: "stable",
+  deteriorating: "deteriorating",
+} as const;
+
+/**
+ * Month-to-month fluctuation level in net cashflow
+ */
+export type TrendAnalysisVolatility =
+  (typeof TrendAnalysisVolatility)[keyof typeof TrendAnalysisVolatility];
+
+export const TrendAnalysisVolatility = {
+  low: "low",
+  moderate: "moderate",
+  high: "high",
+} as const;
+
+/**
+ * Monthly trend intelligence computed from transaction history
+ */
+export interface TrendAnalysis {
+  /** Per-month aggregated inflow, outflow, and net cashflow */
+  monthlyData: MonthlyDataPoint[];
+  classification: TrendClassification;
+  /** Directional movement of monthly total inflows */
+  inflowTrend: TrendAnalysisInflowTrend;
+  /** Directional movement of monthly total outflows */
+  outflowTrend: TrendAnalysisOutflowTrend;
+  /** Directional movement of monthly net cashflow */
+  netTrend: TrendAnalysisNetTrend;
+  /** Month-to-month fluctuation level in net cashflow */
+  volatility: TrendAnalysisVolatility;
+  /** Score modifier applied to the total score (negative to positive) */
+  trendScore: number;
+  /** Human-readable insights describing the detected trend patterns */
+  explanations: string[];
+}
+
+/**
  * Configuration values used when this assessment was scored
  */
 export type ScorecardConfigSnapshot = {
@@ -202,6 +299,7 @@ export interface Scorecard {
   confidenceReasons: string[];
   /** Rules that affected the final verdict */
   triggeredRules: TriggeredRule[];
+  trendAnalysis: TrendAnalysis;
   /** Configuration values used when this assessment was scored */
   configSnapshot: ScorecardConfigSnapshot;
 }

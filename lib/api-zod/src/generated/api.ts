@@ -247,6 +247,7 @@ export const GetAssessmentResponse = zod
                       "auto-fail",
                       "cap-review",
                       "score-penalty",
+                      "score-bonus",
                       "passed",
                       "confidence-warning",
                     ])
@@ -258,6 +259,65 @@ export const GetAssessmentResponse = zod
                 .describe("A rule that affected the final assessment decision"),
             )
             .describe("Rules that affected the final verdict"),
+          trendAnalysis: zod
+            .object({
+              monthlyData: zod
+                .array(
+                  zod
+                    .object({
+                      month: zod
+                        .string()
+                        .describe("Calendar month in YYYY-MM format"),
+                      inflow: zod
+                        .number()
+                        .describe("Total inflows recorded in this month"),
+                      outflow: zod
+                        .number()
+                        .describe("Total outflows recorded in this month"),
+                      net: zod
+                        .number()
+                        .describe(
+                          "Net cashflow for this month (inflow - outflow)",
+                        ),
+                    })
+                    .describe(
+                      "Aggregated cashflow data for a single calendar month",
+                    ),
+                )
+                .describe(
+                  "Per-month aggregated inflow, outflow, and net cashflow",
+                ),
+              classification: zod
+                .enum(["POSITIVE", "STABLE", "NEGATIVE"])
+                .describe(
+                  "Overall directional trend classification based on cashflow trajectory. POSITIVE = cashflow is improving over the assessment period. STABLE = no significant directional movement detected. NEGATIVE = cashflow is deteriorating over the assessment period.\n",
+                ),
+              inflowTrend: zod
+                .enum(["increasing", "stable", "declining"])
+                .describe("Directional movement of monthly total inflows"),
+              outflowTrend: zod
+                .enum(["increasing", "stable", "declining"])
+                .describe("Directional movement of monthly total outflows"),
+              netTrend: zod
+                .enum(["improving", "stable", "deteriorating"])
+                .describe("Directional movement of monthly net cashflow"),
+              volatility: zod
+                .enum(["low", "moderate", "high"])
+                .describe("Month-to-month fluctuation level in net cashflow"),
+              trendScore: zod
+                .number()
+                .describe(
+                  "Score modifier applied to the total score (negative to positive)",
+                ),
+              explanations: zod
+                .array(zod.string())
+                .describe(
+                  "Human-readable insights describing the detected trend patterns",
+                ),
+            })
+            .describe(
+              "Monthly trend intelligence computed from transaction history",
+            ),
           configSnapshot: zod
             .object({
               passThreshold: zod.number(),

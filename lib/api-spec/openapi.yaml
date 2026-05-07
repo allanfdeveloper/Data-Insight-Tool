@@ -507,7 +507,7 @@ components:
           description: Machine-readable rule identifier
         effect:
           type: string
-          enum: [auto-fail, cap-review, score-penalty, passed, confidence-warning]
+          enum: [auto-fail, cap-review, score-penalty, score-bonus, passed, confidence-warning]
           description: How this rule affected the verdict
         description:
           type: string
@@ -591,6 +591,82 @@ components:
             - irregularityScore
             - irregularityFlags
 
+    MonthlyDataPoint:
+      type: object
+      description: Aggregated cashflow data for a single calendar month
+      properties:
+        month:
+          type: string
+          description: Calendar month in YYYY-MM format
+        inflow:
+          type: number
+          description: Total inflows recorded in this month
+        outflow:
+          type: number
+          description: Total outflows recorded in this month
+        net:
+          type: number
+          description: Net cashflow for this month (inflow - outflow)
+      required:
+        - month
+        - inflow
+        - outflow
+        - net
+
+    TrendClassification:
+      type: string
+      enum: [POSITIVE, STABLE, NEGATIVE]
+      description: >
+        Overall directional trend classification based on cashflow trajectory.
+        POSITIVE = cashflow is improving over the assessment period.
+        STABLE = no significant directional movement detected.
+        NEGATIVE = cashflow is deteriorating over the assessment period.
+
+    TrendAnalysis:
+      type: object
+      description: Monthly trend intelligence computed from transaction history
+      properties:
+        monthlyData:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyDataPoint"
+          description: Per-month aggregated inflow, outflow, and net cashflow
+        classification:
+          $ref: "#/components/schemas/TrendClassification"
+        inflowTrend:
+          type: string
+          enum: [increasing, stable, declining]
+          description: Directional movement of monthly total inflows
+        outflowTrend:
+          type: string
+          enum: [increasing, stable, declining]
+          description: Directional movement of monthly total outflows
+        netTrend:
+          type: string
+          enum: [improving, stable, deteriorating]
+          description: Directional movement of monthly net cashflow
+        volatility:
+          type: string
+          enum: [low, moderate, high]
+          description: Month-to-month fluctuation level in net cashflow
+        trendScore:
+          type: number
+          description: Score modifier applied to the total score (negative to positive)
+        explanations:
+          type: array
+          items:
+            type: string
+          description: Human-readable insights describing the detected trend patterns
+      required:
+        - monthlyData
+        - classification
+        - inflowTrend
+        - outflowTrend
+        - netTrend
+        - volatility
+        - trendScore
+        - explanations
+
     Scorecard:
       type: object
       description: Multi-factor credit assessment scorecard
@@ -622,6 +698,8 @@ components:
           items:
             $ref: "#/components/schemas/TriggeredRule"
           description: Rules that affected the final verdict
+        trendAnalysis:
+          $ref: "#/components/schemas/TrendAnalysis"
         configSnapshot:
           type: object
           description: Configuration values used when this assessment was scored
@@ -657,6 +735,7 @@ components:
         - statusReason
         - confidence
         - confidenceReasons
+        - trendAnalysis
         - triggeredRules
         - configSnapshot
 

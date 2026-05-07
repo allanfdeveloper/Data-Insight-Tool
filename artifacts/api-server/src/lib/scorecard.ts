@@ -5,13 +5,15 @@
  * Configuration (weights, thresholds, minimum data requirements) is
  * loaded from the database and passed in at call time — nothing is hardcoded.
  *
- * Confidence layer (separate from the verdict):
+ * Confidence layer:
  *   HIGH   — meets both minMonths AND minTransactions
  *   MEDIUM — meets exactly one requirement
  *   LOW    — meets neither requirement
  *
- * The score always determines PASS/REVIEW/FAIL (hard gates below).
- * Insufficient data lowers confidence but never blocks a PASS.
+ * Trend intelligence layer:
+ *   POSITIVE — cashflow improving over assessment period (+4 pts)
+ *   STABLE   — no significant direction detected (0 pts)
+ *   NEGATIVE — cashflow deteriorating (-4 pts)
  *
  * Hard gates (override score):
  *   1. Negative cashflow (outflows >= inflows) → FAIL
@@ -53,6 +55,13 @@ const SPIKE_RATIO = 2.5;
 const HIGH_IRREGULARITY_CV = 0.9;
 const MODERATE_IRREGULARITY_CV = 0.55;
 
+// Trend detection thresholds
+const TREND_SLOPE_THRESHOLD = 0.05;   // 5% relative change per month to count as a trend
+const TREND_SCORE_BONUS = 4;           // pts added for POSITIVE
+const TREND_SCORE_PENALTY = 4;         // pts removed for NEGATIVE
+const VOLATILITY_HIGH_CV = 0.6;
+const VOLATILITY_MODERATE_CV = 0.25;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -62,6 +71,34 @@ function stddev(values: number[]): number {
   const mean = values.reduce((a, b) => a + b, 0) / values.length;
   const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
   return Math.sqrt(variance);
+}
+
+/** Ordinary least-squares slope for a sequence of values (index = x). */
+function linearSlope(values: number[]): number {
+  const n = values.length;
+  if (n < 2) return 0;
+  const meanX = (n - 1) / 2;
+  const meanY = values.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (i - meanX) * (values[i] - meanY);
+    den += (i - meanX) ** 2;
+  }
+  return den === 0 ? 0 : num / den;
+}
+
+/** Classify the direction of a slope relative to the mean magnitude. */
+function directionOf(
+  slope: number,
+  meanMagnitude: number,
+  threshold = TREND_SLOPE_THRESHOLD
+): "increasing" | "stable" | "declining" {
+  if (meanMagnitude === 0) return "stable";
+  const rel = slope / meanMagnitude;
+  if (rel > threshold) return "increasing";
+  if (rel < -threshold) return "declining";
+  return "stable";
 }
 
 function monthlyInflowMap(rows: TransactionRow[]): Map<string, number> {
@@ -132,10 +169,29 @@ function normalizeConsistency(cv: number): number {
 // ---------------------------------------------------------------------------
 
 export type AssessmentConfidence = "HIGH" | "MEDIUM" | "LOW";
+export type TrendClassification = "POSITIVE" | "STABLE" | "NEGATIVE";
+
+export interface MonthlyDataPoint {
+  month: string;   // YYYY-MM
+  inflow: number;
+  outflow: number;
+  net: number;
+}
+
+export interface TrendAnalysis {
+  monthlyData: MonthlyDataPoint[];
+  classification: TrendClassification;
+  inflowTrend: "increasing" | "stable" | "declining";
+  outflowTrend: "increasing" | "stable" | "declining";
+  netTrend: "improving" | "stable" | "deteriorating";
+  volatility: "low" | "moderate" | "high";
+  trendScore: number;
+  explanations: string[];
+}
 
 export interface TriggeredRule {
   rule: string;
-  effect: "auto-fail" | "cap-review" | "score-penalty" | "passed" | "confidence-warning";
+  effect: "auto-fail" | "cap-review" | "score-penalty" | "score-bonus" | "passed" | "confidence-warning";
   description: string;
 }
 
@@ -182,6 +238,7 @@ export interface Scorecard {
   statusReason: string;
   confidence: AssessmentConfidence;
   confidenceReasons: string[];
+  trendAnalysis: TrendAnalysis;
   triggeredRules: TriggeredRule[];
   configSnapshot: ConfigSnapshot;
 }
@@ -190,6 +247,148 @@ export interface ScorecardResult {
   scorecard: Scorecard;
   status: "PASS" | "REVIEW" | "FAIL";
   confidence: AssessmentConfidence;
+}
+
+// ---------------------------------------------------------------------------
+// Trend computation
+// ---------------------------------------------------------------------------
+
+function computeTrend(rows: TransactionRow[]): TrendAnalysis {
+  // Build per-month aggregates
+  const monthMap = new Map<string, { inflow: number; outflow: number }>();
+  for (const row of rows) {
+    const d = new Date(row.date);
+    if (isNaN(d.getTime())) continue;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const entry = monthMap.get(key) ?? { inflow: 0, outflow: 0 };
+    if (row.type === "Inflow") entry.inflow += row.amount;
+    else entry.outflow += row.amount;
+    monthMap.set(key, entry);
+  }
+
+  const monthlyData: MonthlyDataPoint[] = Array.from(monthMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, { inflow, outflow }]) => ({
+      month,
+      inflow: Math.round(inflow * 100) / 100,
+      outflow: Math.round(outflow * 100) / 100,
+      net: Math.round((inflow - outflow) * 100) / 100,
+    }));
+
+  // Need at least 2 months for a meaningful trend
+  if (monthlyData.length < 2) {
+    return {
+      monthlyData,
+      classification: "STABLE",
+      inflowTrend: "stable",
+      outflowTrend: "stable",
+      netTrend: "stable",
+      volatility: "low",
+      trendScore: 0,
+      explanations: ["Insufficient monthly data for trend analysis — minimum 2 months required."],
+    };
+  }
+
+  // Compute slopes
+  const inflows  = monthlyData.map((m) => m.inflow);
+  const outflows = monthlyData.map((m) => m.outflow);
+  const nets     = monthlyData.map((m) => m.net);
+
+  const meanInflow  = inflows.reduce((a, b) => a + b, 0) / inflows.length;
+  const meanOutflow = outflows.reduce((a, b) => a + b, 0) / outflows.length;
+  const meanAbsNet  = nets.map(Math.abs).reduce((a, b) => a + b, 0) / nets.length;
+
+  const inflowSlope  = linearSlope(inflows);
+  const outflowSlope = linearSlope(outflows);
+  const netSlope     = linearSlope(nets);
+
+  const inflowTrend  = directionOf(inflowSlope,  meanInflow);
+  const outflowTrend = directionOf(outflowSlope, meanOutflow);
+  const rawNetDir    = directionOf(netSlope, meanAbsNet || 1);
+  const netTrend: TrendAnalysis["netTrend"] =
+    rawNetDir === "increasing" ? "improving" :
+    rawNetDir === "declining"  ? "deteriorating" :
+    "stable";
+
+  // Volatility: CV of monthly net cashflow
+  const netMean  = nets.reduce((a, b) => a + b, 0) / nets.length;
+  const netCV    = netMean !== 0
+    ? Math.abs(stddev(nets) / netMean)
+    : stddev(nets) > 0 ? 1 : 0;
+  const volatility: TrendAnalysis["volatility"] =
+    netCV > VOLATILITY_HIGH_CV     ? "high" :
+    netCV > VOLATILITY_MODERATE_CV ? "moderate" :
+    "low";
+
+  // Overall classification
+  let classification: TrendClassification;
+  const netImproving    = netTrend === "improving";
+  const netDeteriorating = netTrend === "deteriorating";
+  const inflowUp        = inflowTrend === "increasing";
+  const outflowDown     = outflowTrend === "declining";
+  const inflowDown      = inflowTrend === "declining";
+  const outflowUp       = outflowTrend === "increasing";
+
+  if (netImproving || (inflowUp && !outflowUp)) {
+    classification = "POSITIVE";
+  } else if (netDeteriorating || (inflowDown && outflowUp)) {
+    classification = "NEGATIVE";
+  } else {
+    classification = "STABLE";
+  }
+
+  // Downgrade POSITIVE → STABLE when volatility is high (erratic, not genuinely improving)
+  if (volatility === "high" && classification === "POSITIVE") {
+    classification = "STABLE";
+  }
+
+  // Score modifier
+  const trendScore =
+    classification === "POSITIVE" ? TREND_SCORE_BONUS :
+    classification === "NEGATIVE" ? -TREND_SCORE_PENALTY :
+    0;
+
+  // Build human-readable explanations
+  const explanations: string[] = [];
+
+  if (inflowTrend === "increasing") {
+    explanations.push("Inflows are increasing over the assessment period — business revenue is growing.");
+  } else if (inflowTrend === "declining") {
+    explanations.push("Declining inflow trend detected across the assessment period.");
+  }
+
+  if (outflowTrend === "increasing") {
+    explanations.push("Outflows are rising month-over-month — costs are increasing.");
+  } else if (outflowTrend === "declining") {
+    explanations.push("Outflows are declining — cost control is improving.");
+  }
+
+  if (netTrend === "improving") {
+    explanations.push("Business shows improving monthly net cashflow over the assessment period.");
+  } else if (netTrend === "deteriorating") {
+    explanations.push("Deteriorating net cashflow trend detected across the assessment period.");
+  }
+
+  if (volatility === "high") {
+    explanations.push("High month-to-month volatility observed — cashflow patterns are inconsistent.");
+  } else if (volatility === "moderate") {
+    explanations.push("Moderate month-to-month fluctuations observed.");
+  }
+
+  if (explanations.length === 0) {
+    explanations.push("Business cashflow is stable with no significant directional trend detected.");
+  }
+
+  return {
+    monthlyData,
+    classification,
+    inflowTrend,
+    outflowTrend,
+    netTrend,
+    volatility,
+    trendScore,
+    explanations,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -326,12 +525,16 @@ export function computeScorecard(
     irregularityFlags,
   };
 
-  // ── 4. Total score ──────────────────────────────────────────────────────
-  const totalScore = Math.round(cfWeighted + actWeighted + conWeighted);
+  // ── 4. Trend Intelligence ───────────────────────────────────────────────
+  const trendAnalysis = computeTrend(rows);
 
-  // ── 5. Confidence layer ─────────────────────────────────────────────────
+  // ── 5. Total score (weighted factors + trend modifier) ──────────────────
+  const baseScore   = cfWeighted + actWeighted + conWeighted;
+  const totalScore  = Math.round(Math.min(100, Math.max(0, baseScore + trendAnalysis.trendScore)));
+
+  // ── 6. Confidence layer ─────────────────────────────────────────────────
   const meetsMonths = monthCount >= minMonths;
-  const meetsTxn = transactionCount >= minTransactions;
+  const meetsTxn    = transactionCount >= minTransactions;
 
   let confidence: AssessmentConfidence;
   const confidenceReasons: string[] = [];
@@ -357,11 +560,11 @@ export function computeScorecard(
     );
   }
 
-  // ── 6. Triggered rules ──────────────────────────────────────────────────
+  // ── 7. Triggered rules ──────────────────────────────────────────────────
   const triggeredRules: TriggeredRule[] = [];
-  const negativeCashflow = totalOutflow >= totalInflow;
-  const highlyIrregular = (cv !== null && cv >= HIGH_IRREGULARITY_CV) || irregularityScore >= 25;
-  const veryHighlyIrregular = irregularityScore >= 35;
+  const negativeCashflow     = totalOutflow >= totalInflow;
+  const highlyIrregular      = (cv !== null && cv >= HIGH_IRREGULARITY_CV) || irregularityScore >= 25;
+  const veryHighlyIrregular  = irregularityScore >= 35;
 
   // Hard gate 1 — negative cashflow
   if (negativeCashflow) {
@@ -372,7 +575,7 @@ export function computeScorecard(
     });
   }
 
-  // Confidence warnings — do not affect verdict
+  // Confidence warnings
   if (!meetsMonths) {
     triggeredRules.push({
       rule: "INSUFFICIENT_MONTHS",
@@ -385,6 +588,21 @@ export function computeScorecard(
       rule: "INSUFFICIENT_TRANSACTIONS",
       effect: "confidence-warning",
       description: `Only ${transactionCount} transaction(s) found; minimum recommended is ${minTransactions}. Score calculated from available data.`,
+    });
+  }
+
+  // Trend rule
+  if (trendAnalysis.classification === "POSITIVE") {
+    triggeredRules.push({
+      rule: "TREND_POSITIVE",
+      effect: "score-bonus",
+      description: `Positive cashflow trajectory detected (+${TREND_SCORE_BONUS} pts). ${trendAnalysis.explanations[0] ?? ""}`,
+    });
+  } else if (trendAnalysis.classification === "NEGATIVE") {
+    triggeredRules.push({
+      rule: "TREND_NEGATIVE",
+      effect: "score-penalty",
+      description: `Negative cashflow trajectory detected (-${TREND_SCORE_PENALTY} pts). ${trendAnalysis.explanations[0] ?? ""}`,
     });
   }
 
@@ -420,13 +638,18 @@ export function computeScorecard(
     }
   }
 
-  // ── 7. Final decision ───────────────────────────────────────────────────
+  // ── 8. Final decision ───────────────────────────────────────────────────
   let status: "PASS" | "REVIEW" | "FAIL";
   let statusReason: string;
 
   const confidenceNote = confidence !== "HIGH"
     ? ` (${confidence} confidence — ${confidenceReasons[0] ?? "limited data"})`
     : "";
+
+  const trendNote =
+    trendAnalysis.classification === "POSITIVE" ? ` ${trendAnalysis.explanations[0] ?? ""}` :
+    trendAnalysis.classification === "NEGATIVE" ? ` ${trendAnalysis.explanations[0] ?? ""}` :
+    "";
 
   if (negativeCashflow) {
     status = "FAIL";
@@ -436,16 +659,16 @@ export function computeScorecard(
     statusReason = `Income is critically irregular. Irregularity penalty: ${irregularityScore} pts. ${irregularityFlags.join("; ")}.`;
   } else if (highlyIrregular) {
     status = "REVIEW";
-    statusReason = `Highly irregular income pattern requires manual review. ${irregularityFlags.join("; ")}.${confidenceNote}`;
+    statusReason = `Highly irregular income pattern requires manual review.${trendNote}${confidenceNote}`;
   } else if (totalScore >= passThreshold) {
     status = "PASS";
-    statusReason = `Score ${totalScore}/100 meets the pass threshold (${passThreshold}). ${cfLabel}, ${actLabel.toLowerCase()}, and ${conLabel.toLowerCase()}.${confidenceNote}`;
+    statusReason = `Score ${totalScore}/100 meets the pass threshold (${passThreshold}). ${cfLabel}, ${actLabel.toLowerCase()}, and ${conLabel.toLowerCase()}.${trendNote}${confidenceNote}`;
   } else if (totalScore >= reviewThreshold) {
     status = "REVIEW";
-    statusReason = `Score ${totalScore}/100 is below the pass threshold. ${conLabel}.${confidenceNote}`;
+    statusReason = `Score ${totalScore}/100 is below the pass threshold. ${conLabel}.${trendNote}${confidenceNote}`;
   } else {
     status = "FAIL";
-    statusReason = `Score ${totalScore}/100 is below the review threshold (${reviewThreshold}).${confidenceNote}`;
+    statusReason = `Score ${totalScore}/100 is below the review threshold (${reviewThreshold}).${trendNote}${confidenceNote}`;
   }
 
   const configSnapshot: ConfigSnapshot = {
@@ -468,6 +691,7 @@ export function computeScorecard(
       statusReason,
       confidence,
       confidenceReasons,
+      trendAnalysis,
       triggeredRules,
       configSnapshot,
     },
