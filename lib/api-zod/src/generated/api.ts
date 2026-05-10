@@ -314,9 +314,55 @@ export const GetAssessmentResponse = zod
                 .describe(
                   "Human-readable insights describing the detected trend patterns",
                 ),
+              isSevereDeterioration: zod
+                .boolean()
+                .describe(
+                  "True when both inflows and net cashflow are declining sharply (slope exceeds severe threshold)",
+                ),
+              hasRecoveryMomentum: zod
+                .boolean()
+                .describe(
+                  "True when both inflows and net cashflow show consistent upward improvement",
+                ),
             })
             .describe(
               "Monthly trend intelligence computed from transaction history",
+            ),
+          marginHealth: zod
+            .object({
+              marginRatio: zod
+                .number()
+                .describe(
+                  "Net cashflow as a percentage of total inflows (0–100 scale)",
+                ),
+              classification: zod
+                .enum(["Strong", "Moderate", "Thin"])
+                .describe(
+                  "Operational margin strength classification based on net cashflow as a percentage of total inflows. Strong = above 30%. Moderate = 15%–30%. Thin = below 15%.\n",
+                ),
+              scoreModifier: zod
+                .number()
+                .describe(
+                  "Net score adjustment applied from margin, deterioration, and recovery signals",
+                ),
+              observations: zod
+                .array(zod.string())
+                .describe(
+                  "Human-readable insights about operational margin quality and resilience",
+                ),
+              isSevereDeterioration: zod
+                .boolean()
+                .describe(
+                  "True when both inflows and net cashflow are declining sharply",
+                ),
+              isRecovery: zod
+                .boolean()
+                .describe(
+                  "True when consistent recovery momentum is confirmed across both inflows and net",
+                ),
+            })
+            .describe(
+              "Financial resilience intelligence based on operational margin analysis",
             ),
           configSnapshot: zod
             .object({

@@ -6,7 +6,7 @@ import {
   TrendingUp, TrendingDown, Hash, Calendar, FileSpreadsheet,
   Activity, BarChart3, RefreshCw, AlertTriangle, ShieldX,
   ShieldCheck, ShieldAlert, Info, ArrowUpRight, ArrowDownRight,
-  Minus, TrendingUp as TrendUp, Zap,
+  Minus, Zap, Shield,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import {
 
 type Confidence = "HIGH" | "MEDIUM" | "LOW";
 type TrendClassification = "POSITIVE" | "STABLE" | "NEGATIVE";
+type MarginClassification = "Strong" | "Moderate" | "Thin";
 
 interface MonthlyDataPoint {
   month: string;
@@ -44,6 +45,17 @@ interface TrendAnalysisData {
   volatility: "low" | "moderate" | "high";
   trendScore: number;
   explanations: string[];
+  isSevereDeterioration?: boolean;
+  hasRecoveryMomentum?: boolean;
+}
+
+interface MarginHealthData {
+  marginRatio: number;
+  classification: MarginClassification;
+  scoreModifier: number;
+  observations: string[];
+  isSevereDeterioration: boolean;
+  isRecovery: boolean;
 }
 
 interface TriggeredRule {
@@ -75,6 +87,7 @@ interface ScorecardData {
   confidence: Confidence;
   confidenceReasons: string[];
   trendAnalysis?: TrendAnalysisData;
+  marginHealth?: MarginHealthData;
   triggeredRules: TriggeredRule[];
   configSnapshot?: {
     passThreshold: number;
@@ -239,6 +252,92 @@ function ChartTooltip({ active, payload, label }: any) {
           <span className="font-medium" style={{ color: p.color }}>{formatK(p.value)}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------- Resilience Section ----------
+
+function MarginBadge({ classification }: { classification: MarginClassification }) {
+  if (classification === "Strong")
+    return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100 text-sm px-3 py-1"><Shield className="h-4 w-4 mr-1.5" />Strong Margin</Badge>;
+  if (classification === "Moderate")
+    return <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100 text-sm px-3 py-1"><Shield className="h-4 w-4 mr-1.5" />Moderate Margin</Badge>;
+  return <Badge className="bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-100 text-sm px-3 py-1"><Shield className="h-4 w-4 mr-1.5" />Thin Margin</Badge>;
+}
+
+function ResilienceSection({ mh }: { mh: MarginHealthData }) {
+  const bgBorder =
+    mh.classification === "Strong"   ? "bg-emerald-50 border-emerald-200" :
+    mh.classification === "Moderate" ? "bg-blue-50 border-blue-200" :
+                                        "bg-orange-50 border-orange-200";
+
+  const modifierColor = mh.scoreModifier > 0 ? "text-emerald-700" : mh.scoreModifier < 0 ? "text-orange-700" : "text-slate-500";
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+        <Shield className="h-4 w-4 text-blue-500" />
+        Financial Resilience
+      </h2>
+
+      <div className={`rounded-xl border px-5 py-4 ${bgBorder}`}>
+        <div className="flex items-start gap-4 flex-wrap justify-between mb-3">
+          {/* Margin ratio */}
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Margin Ratio</p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-3xl font-bold text-foreground">
+                {mh.marginRatio !== null ? `${mh.marginRatio.toFixed(1)}%` : "—"}
+              </span>
+              <span className="text-xs text-muted-foreground">net / inflow</span>
+            </div>
+          </div>
+          {/* Classification + score modifier */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <MarginBadge classification={mh.classification} />
+            {mh.scoreModifier !== 0 && (
+              <span className={`text-sm font-semibold ${modifierColor}`}>
+                {mh.scoreModifier > 0 ? `+${mh.scoreModifier}` : mh.scoreModifier} pts applied
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Status indicators */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          {mh.isSevereDeterioration && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium bg-red-50 border-red-200 text-red-700">
+              <TrendingDown className="h-3.5 w-3.5" /> Severe Deterioration
+            </span>
+          )}
+          {mh.isRecovery && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium bg-emerald-50 border-emerald-200 text-emerald-700">
+              <TrendingUp className="h-3.5 w-3.5" /> Recovery Momentum
+            </span>
+          )}
+          {!mh.isSevereDeterioration && !mh.isRecovery && mh.classification === "Strong" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium bg-emerald-50 border-emerald-200 text-emerald-700">
+              <ShieldCheck className="h-3.5 w-3.5" /> Strong Operational Resilience
+            </span>
+          )}
+          {!mh.isSevereDeterioration && !mh.isRecovery && mh.classification === "Thin" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium bg-orange-50 border-orange-200 text-orange-700">
+              <AlertCircle className="h-3.5 w-3.5" /> Operationally Fragile
+            </span>
+          )}
+        </div>
+
+        {/* Observations */}
+        <ul className="space-y-1">
+          {mh.observations.map((obs, i) => (
+            <li key={i} className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
+              <span className="mt-1.5 h-1 w-1 rounded-full bg-muted-foreground/50 shrink-0" />
+              {obs}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -486,6 +585,9 @@ export default function AssessmentDetailPage() {
             </div>
             {sc && <p className="text-xs text-muted-foreground mt-1">Net ratio: {formatPct(sc.cashflowStrength.netRatio)} of total inflow</p>}
           </div>
+
+          {/* ── Financial Resilience ─────────────────────────────────── */}
+          {sc.marginHealth && <ResilienceSection mh={sc.marginHealth} />}
 
           {/* ── Trend Intelligence ───────────────────────────────────── */}
           {trend && <TrendSection trend={trend} />}

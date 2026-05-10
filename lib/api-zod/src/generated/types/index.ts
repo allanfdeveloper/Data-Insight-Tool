@@ -22,6 +22,8 @@ export * from "./cashflowStrengthFactor";
 export * from "./consistencyFactor";
 export * from "./errorResponse";
 export * from "./healthStatus";
+export * from "./marginClassification";
+export * from "./marginHealth";
 export * from "./messageResponse";
 export * from "./monthlyDataPoint";
 export * from "./scorecard";

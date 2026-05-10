@@ -261,6 +261,33 @@ export default function DashboardPage() {
             {summary.latestAssessment.fileName} &middot; {formatDate(summary.latestAssessment.createdAt)}
           </p>
 
+          {/* Resilience mini-badge */}
+          {latestTrend && (() => {
+            const mh = (latestDetail as any)?.scorecard?.marginHealth;
+            if (!mh) return null;
+            const color =
+              mh.classification === "Strong"   ? "text-emerald-700 bg-emerald-50 border-emerald-200" :
+              mh.classification === "Moderate" ? "text-blue-700 bg-blue-50 border-blue-200" :
+                                                  "text-orange-700 bg-orange-50 border-orange-200";
+            return (
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-card-border">
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${color}`}>
+                  {mh.classification} Margin · {mh.marginRatio !== null ? `${mh.marginRatio.toFixed(1)}%` : "—"}
+                </span>
+                {mh.isSevereDeterioration && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium text-red-700 bg-red-50 border-red-200">
+                    ↓ Severe Deterioration
+                  </span>
+                )}
+                {mh.isRecovery && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium text-emerald-700 bg-emerald-50 border-emerald-200">
+                    ↑ Recovery Momentum
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Trend charts inline */}
           {latestTrend?.monthlyData && latestTrend.monthlyData.length >= 2 && (
             <MiniTrendChart

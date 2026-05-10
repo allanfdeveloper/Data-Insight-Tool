@@ -173,6 +173,36 @@ export type ConsistencyFactor = ScorecardFactor & {
 };
 
 /**
+ * Operational margin strength classification based on net cashflow as a percentage of total inflows. Strong = above 30%. Moderate = 15%–30%. Thin = below 15%.
+
+ */
+export type MarginClassification =
+  (typeof MarginClassification)[keyof typeof MarginClassification];
+
+export const MarginClassification = {
+  Strong: "Strong",
+  Moderate: "Moderate",
+  Thin: "Thin",
+} as const;
+
+/**
+ * Financial resilience intelligence based on operational margin analysis
+ */
+export interface MarginHealth {
+  /** Net cashflow as a percentage of total inflows (0–100 scale) */
+  marginRatio: number;
+  classification: MarginClassification;
+  /** Net score adjustment applied from margin, deterioration, and recovery signals */
+  scoreModifier: number;
+  /** Human-readable insights about operational margin quality and resilience */
+  observations: string[];
+  /** True when both inflows and net cashflow are declining sharply */
+  isSevereDeterioration: boolean;
+  /** True when consistent recovery momentum is confirmed across both inflows and net */
+  isRecovery: boolean;
+}
+
+/**
  * Aggregated cashflow data for a single calendar month
  */
 export interface MonthlyDataPoint {
@@ -266,6 +296,10 @@ export interface TrendAnalysis {
   trendScore: number;
   /** Human-readable insights describing the detected trend patterns */
   explanations: string[];
+  /** True when both inflows and net cashflow are declining sharply (slope exceeds severe threshold) */
+  isSevereDeterioration: boolean;
+  /** True when both inflows and net cashflow show consistent upward improvement */
+  hasRecoveryMomentum: boolean;
 }
 
 /**
@@ -300,6 +334,7 @@ export interface Scorecard {
   /** Rules that affected the final verdict */
   triggeredRules: TriggeredRule[];
   trendAnalysis: TrendAnalysis;
+  marginHealth: MarginHealth;
   /** Configuration values used when this assessment was scored */
   configSnapshot: ScorecardConfigSnapshot;
 }

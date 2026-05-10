@@ -31,4 +31,8 @@ export interface TrendAnalysis {
   trendScore: number;
   /** Human-readable insights describing the detected trend patterns */
   explanations: string[];
+  /** True when both inflows and net cashflow are declining sharply (slope exceeds severe threshold) */
+  isSevereDeterioration: boolean;
+  /** True when both inflows and net cashflow show consistent upward improvement */
+  hasRecoveryMomentum: boolean;
 }

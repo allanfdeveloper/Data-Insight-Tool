@@ -591,6 +591,47 @@ components:
             - irregularityScore
             - irregularityFlags
 
+    MarginClassification:
+      type: string
+      enum: [Strong, Moderate, Thin]
+      description: >
+        Operational margin strength classification based on net cashflow as a
+        percentage of total inflows.
+        Strong = above 30%.
+        Moderate = 15%–30%.
+        Thin = below 15%.
+
+    MarginHealth:
+      type: object
+      description: Financial resilience intelligence based on operational margin analysis
+      properties:
+        marginRatio:
+          type: number
+          description: Net cashflow as a percentage of total inflows (0–100 scale)
+        classification:
+          $ref: "#/components/schemas/MarginClassification"
+        scoreModifier:
+          type: number
+          description: Net score adjustment applied from margin, deterioration, and recovery signals
+        observations:
+          type: array
+          items:
+            type: string
+          description: Human-readable insights about operational margin quality and resilience
+        isSevereDeterioration:
+          type: boolean
+          description: True when both inflows and net cashflow are declining sharply
+        isRecovery:
+          type: boolean
+          description: True when consistent recovery momentum is confirmed across both inflows and net
+      required:
+        - marginRatio
+        - classification
+        - scoreModifier
+        - observations
+        - isSevereDeterioration
+        - isRecovery
+
     MonthlyDataPoint:
       type: object
       description: Aggregated cashflow data for a single calendar month
@@ -657,6 +698,12 @@ components:
           items:
             type: string
           description: Human-readable insights describing the detected trend patterns
+        isSevereDeterioration:
+          type: boolean
+          description: True when both inflows and net cashflow are declining sharply (slope exceeds severe threshold)
+        hasRecoveryMomentum:
+          type: boolean
+          description: True when both inflows and net cashflow show consistent upward improvement
       required:
         - monthlyData
         - classification
@@ -666,6 +713,8 @@ components:
         - volatility
         - trendScore
         - explanations
+        - isSevereDeterioration
+        - hasRecoveryMomentum
 
     Scorecard:
       type: object
@@ -700,6 +749,8 @@ components:
           description: Rules that affected the final verdict
         trendAnalysis:
           $ref: "#/components/schemas/TrendAnalysis"
+        marginHealth:
+          $ref: "#/components/schemas/MarginHealth"
         configSnapshot:
           type: object
           description: Configuration values used when this assessment was scored
@@ -736,6 +787,7 @@ components:
         - confidence
         - confidenceReasons
         - trendAnalysis
+        - marginHealth
         - triggeredRules
         - configSnapshot
 

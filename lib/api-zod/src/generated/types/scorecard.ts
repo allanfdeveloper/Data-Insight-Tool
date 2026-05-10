@@ -9,6 +9,7 @@ import type { ActivityLevelFactor } from "./activityLevelFactor";
 import type { AssessmentConfidence } from "./assessmentConfidence";
 import type { CashflowStrengthFactor } from "./cashflowStrengthFactor";
 import type { ConsistencyFactor } from "./consistencyFactor";
+import type { MarginHealth } from "./marginHealth";
 import type { ScorecardConfigSnapshot } from "./scorecardConfigSnapshot";
 import type { TrendAnalysis } from "./trendAnalysis";
 import type { TriggeredRule } from "./triggeredRule";
@@ -32,6 +33,7 @@ export interface Scorecard {
   /** Rules that affected the final verdict */
   triggeredRules: TriggeredRule[];
   trendAnalysis: TrendAnalysis;
+  marginHealth: MarginHealth;
   /** Configuration values used when this assessment was scored */
   configSnapshot: ScorecardConfigSnapshot;
 }

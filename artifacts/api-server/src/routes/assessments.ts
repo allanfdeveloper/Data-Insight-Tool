@@ -30,6 +30,22 @@ function backfillScorecard(sc: unknown, confidence: string): unknown {
       volatility: "low",
       trendScore: 0,
       explanations: ["Trend analysis not available for this assessment — re-upload to generate trend data."],
+      isSevereDeterioration: false,
+      hasRecoveryMomentum: false,
+    };
+  } else {
+    const ta = scorecard.trendAnalysis as Record<string, unknown>;
+    if (ta.isSevereDeterioration === undefined) ta.isSevereDeterioration = false;
+    if (ta.hasRecoveryMomentum === undefined) ta.hasRecoveryMomentum = false;
+  }
+  if (!scorecard.marginHealth) {
+    scorecard.marginHealth = {
+      marginRatio: 0,
+      classification: "Moderate",
+      scoreModifier: 0,
+      observations: ["Margin health analysis not available for this assessment — re-upload to generate resilience data."],
+      isSevereDeterioration: false,
+      isRecovery: false,
     };
   }
   // Migrate old "cap-review" effects on insufficient-data rules to "confidence-warning"
