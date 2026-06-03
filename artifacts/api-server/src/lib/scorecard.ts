@@ -223,6 +223,8 @@ export interface TrendAnalysis {
   explanations: string[];
   isSevereDeterioration: boolean;
   hasRecoveryMomentum: boolean;
+  /** True when there are fewer than 2 months with inflow activity — no trend penalties are applied. */
+  isInsufficientHistory: boolean;
 }
 
 export interface MarginHealth {
@@ -342,9 +344,34 @@ function computeTrend(rows: TransactionRow[]): TrendAnalysis {
       netTrend: "stable",
       volatility: "low",
       trendScore: 0,
-      explanations: ["Insufficient monthly data for trend analysis — minimum 2 months required."],
+      explanations: ["Trend cannot be evaluated due to insufficient monthly history — at least 2 months with inflow activity are required."],
       isSevereDeterioration: false,
       hasRecoveryMomentum: false,
+      isInsufficientHistory: true,
+    };
+  }
+
+  // Only months that actually contain inflow activity count toward trend eligibility.
+  // An outflow-only month (e.g. expenses in a month before the first payment arrives)
+  // is NOT evidence of declining revenue — missing future data is not deterioration.
+  const monthsWithInflows = monthlyData.filter((m) => m.inflow > 0).length;
+
+  if (monthsWithInflows < 2) {
+    return {
+      monthlyData,
+      classification: "STABLE",
+      inflowTrend: "stable",
+      outflowTrend: "stable",
+      netTrend: "stable",
+      volatility: "low",
+      trendScore: 0,
+      explanations: [
+        "Trend cannot be evaluated due to insufficient monthly history — at least 2 months with inflow activity are required.",
+        "Months containing only outflows (no revenue) are not treated as evidence of decline.",
+      ],
+      isSevereDeterioration: false,
+      hasRecoveryMomentum: false,
+      isInsufficientHistory: true,
     };
   }
 
@@ -469,6 +496,7 @@ function computeTrend(rows: TransactionRow[]): TrendAnalysis {
     explanations,
     isSevereDeterioration,
     hasRecoveryMomentum,
+    isInsufficientHistory: false,
   };
 }
 

@@ -37,6 +37,7 @@ function backfillScorecard(sc: unknown, confidence: string): unknown {
     const ta = scorecard.trendAnalysis as Record<string, unknown>;
     if (ta.isSevereDeterioration === undefined) ta.isSevereDeterioration = false;
     if (ta.hasRecoveryMomentum === undefined) ta.hasRecoveryMomentum = false;
+    if (ta.isInsufficientHistory === undefined) ta.isInsufficientHistory = false;
   }
   if (!scorecard.marginHealth) {
     scorecard.marginHealth = {

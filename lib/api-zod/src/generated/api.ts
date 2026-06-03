@@ -324,6 +324,11 @@ export const GetAssessmentResponse = zod
                 .describe(
                   "True when both inflows and net cashflow show consistent upward improvement",
                 ),
+              isInsufficientHistory: zod
+                .boolean()
+                .describe(
+                  "True when fewer than 2 months contain inflow activity — trend cannot be reliably evaluated and no penalties are applied",
+                ),
             })
             .describe(
               "Monthly trend intelligence computed from transaction history",

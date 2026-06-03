@@ -47,6 +47,7 @@ interface TrendAnalysisData {
   explanations: string[];
   isSevereDeterioration?: boolean;
   hasRecoveryMomentum?: boolean;
+  isInsufficientHistory?: boolean;
 }
 
 interface MarginHealthData {
@@ -161,7 +162,9 @@ function ConfidenceBadge({ confidence }: { confidence?: Confidence }) {
   return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 text-sm px-3 py-1"><ShieldX className="h-4 w-4 mr-1.5" />LOW Confidence</Badge>;
 }
 
-function TrendBadge({ classification }: { classification?: TrendClassification }) {
+function TrendBadge({ classification, isInsufficientHistory }: { classification?: TrendClassification; isInsufficientHistory?: boolean }) {
+  if (isInsufficientHistory)
+    return <Badge className="bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-100 text-sm px-3 py-1"><Info className="h-4 w-4 mr-1.5" />Insufficient History</Badge>;
   if (classification === "POSITIVE")
     return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100 text-sm px-3 py-1"><TrendingUp className="h-4 w-4 mr-1.5" />POSITIVE Trend</Badge>;
   if (classification === "NEGATIVE")
@@ -357,13 +360,16 @@ const MOD_CONCENTRATION_TOP3_PCT     = 60;
 
 // ---------- Assessment Diagnostics ----------
 
-function AssessmentDiagnostics({ sc, assessment }: { sc: ScorecardData; assessment: any }) {
-  const rc   = sc.revenueConcentration;
-  const mh   = sc.marginHealth;
-  const ta   = sc.trendAnalysis;
+function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
+  const rc = sc.revenueConcentration;
+  const mh = sc.marginHealth;
+  const ta = sc.trendAnalysis;
+
+  const insufficient = !!ta?.isInsufficientHistory;
 
   const positiveSignals: { label: string; detail: string }[] = [];
-  const riskSignals: { label: string; detail: string }[] = [];
+  const riskSignals:     { label: string; detail: string }[] = [];
+  const infoSignals:     { label: string; detail: string }[] = [];
 
   // ── Positive signals ─────────────────────────────────────────────────
   if (sc.cashflowStrength.normalizedScore >= 70) {
@@ -378,7 +384,8 @@ function AssessmentDiagnostics({ sc, assessment }: { sc: ScorecardData; assessme
       detail: "Regular and predictable inflow patterns detected across the assessment period.",
     });
   }
-  if (ta?.classification === "POSITIVE") {
+  // Positive trend: only shown when history is sufficient (classification is POSITIVE only when !insufficient)
+  if (!insufficient && ta?.classification === "POSITIVE") {
     positiveSignals.push({
       label:  "Positive Trend",
       detail: ta.explanations[0] ?? "Cashflow is improving over the assessment period.",
@@ -404,20 +411,29 @@ function AssessmentDiagnostics({ sc, assessment }: { sc: ScorecardData; assessme
       detail: mh.observations[0] ?? "Limited financial buffer for operational disruptions.",
     });
   }
-  if (ta?.volatility === "high") {
+  // Volatility and deterioration: only valid when sufficient monthly history exists
+  if (!insufficient && ta?.volatility === "high") {
     riskSignals.push({
       label:  "High Volatility",
       detail: "Inconsistent month-to-month cashflow patterns — revenue is unpredictable.",
     });
   }
-  if (ta?.isSevereDeterioration || ta?.classification === "NEGATIVE") {
+  if (!insufficient && (ta?.isSevereDeterioration || ta?.classification === "NEGATIVE")) {
     riskSignals.push({
       label:  ta?.isSevereDeterioration ? "Severe Deterioration" : "Negative Trend",
       detail: ta?.explanations[0] ?? "Cashflow is showing a declining trajectory.",
     });
   }
 
-  const hasAny = positiveSignals.length > 0 || riskSignals.length > 0;
+  // ── Information signals ───────────────────────────────────────────────
+  if (insufficient) {
+    infoSignals.push({
+      label:  "Insufficient History for Trend Analysis",
+      detail: "Fewer than 2 months of inflow activity were detected — trend direction, volatility, and deterioration risk cannot be reliably evaluated. No trend-related penalties are applied.",
+    });
+  }
+
+  const hasAny = positiveSignals.length > 0 || riskSignals.length > 0 || infoSignals.length > 0;
   if (!hasAny) return null;
 
   return (
@@ -472,6 +488,26 @@ function AssessmentDiagnostics({ sc, assessment }: { sc: ScorecardData; assessme
           )}
         </div>
       </div>
+
+      {/* Information Signals — only shown when relevant */}
+      {infoSignals.length > 0 && (
+        <div className="mt-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-2.5 flex items-center gap-1.5">
+            <Info className="h-3.5 w-3.5" /> Information Signals
+          </p>
+          <div className="space-y-2">
+            {infoSignals.map((s, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-semibold text-blue-900">{s.label}</p>
+                  <p className="text-xs text-blue-700 leading-relaxed">{s.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -571,13 +607,16 @@ function TrendSection({ trend }: { trend: TrendAnalysisData }) {
   }));
 
   const hasData = chartData.length >= 2;
+  const insufficient = !!trend.isInsufficientHistory;
 
   const trendColors = {
     POSITIVE: { bg: "bg-emerald-50", border: "border-emerald-200", icon: <TrendingUp className="h-4 w-4 text-emerald-600" /> },
     STABLE:   { bg: "bg-slate-50",   border: "border-slate-200",   icon: <Minus className="h-4 w-4 text-slate-500" /> },
     NEGATIVE: { bg: "bg-red-50",     border: "border-red-200",     icon: <TrendingDown className="h-4 w-4 text-red-600" /> },
   };
-  const tc = trendColors[trend.classification];
+  const tc = insufficient
+    ? { bg: "bg-slate-50", border: "border-slate-200", icon: <Info className="h-4 w-4 text-slate-400" /> }
+    : trendColors[trend.classification];
 
   return (
     <div className="mb-6">
@@ -593,26 +632,28 @@ function TrendSection({ trend }: { trend: TrendAnalysisData }) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-2">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Trend Classification</p>
-              <TrendBadge classification={trend.classification} />
-              {trend.trendScore !== 0 && (
+              <TrendBadge classification={trend.classification} isInsufficientHistory={insufficient} />
+              {!insufficient && trend.trendScore !== 0 && (
                 <span className={`text-xs font-semibold ${trend.trendScore > 0 ? "text-emerald-700" : "text-red-700"}`}>
                   {trend.trendScore > 0 ? `+${trend.trendScore}` : trend.trendScore} pts applied
                 </span>
               )}
             </div>
-            {/* Direction pills */}
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              <DirectionPill label="Inflows"    value={trend.inflowTrend} />
-              <DirectionPill label="Outflows"   value={trend.outflowTrend} />
-              <DirectionPill label="Net"        value={trend.netTrend} />
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${
-                trend.volatility === "high"     ? "text-red-700 bg-red-50 border-red-200" :
-                trend.volatility === "moderate" ? "text-amber-700 bg-amber-50 border-amber-200" :
-                                                  "text-green-700 bg-green-50 border-green-200"
-              }`}>
-                <Activity className="h-3 w-3" /> Volatility: {trend.volatility}
-              </span>
-            </div>
+            {/* Direction pills — only shown when sufficient history exists */}
+            {!insufficient && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                <DirectionPill label="Inflows"    value={trend.inflowTrend} />
+                <DirectionPill label="Outflows"   value={trend.outflowTrend} />
+                <DirectionPill label="Net"        value={trend.netTrend} />
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${
+                  trend.volatility === "high"     ? "text-red-700 bg-red-50 border-red-200" :
+                  trend.volatility === "moderate" ? "text-amber-700 bg-amber-50 border-amber-200" :
+                                                    "text-green-700 bg-green-50 border-green-200"
+                }`}>
+                  <Activity className="h-3 w-3" /> Volatility: {trend.volatility}
+                </span>
+              </div>
+            )}
             {/* Explanations */}
             <ul className="space-y-1">
               {trend.explanations.map((e, i) => (
@@ -622,6 +663,11 @@ function TrendSection({ trend }: { trend: TrendAnalysisData }) {
                 </li>
               ))}
             </ul>
+            {insufficient && (
+              <p className="text-xs text-slate-500 mt-2 italic">
+                No trend penalties, volatility flags, or deterioration warnings are applied when history is insufficient.
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -816,7 +862,7 @@ export default function AssessmentDetailPage() {
           {trend && <TrendSection trend={trend} />}
 
           {/* ── Assessment Diagnostics ───────────────────────────────── */}
-          {sc && <AssessmentDiagnostics sc={sc} assessment={assessment} />}
+          {sc && <AssessmentDiagnostics sc={sc} />}
 
           {/* ── Scorecard breakdown ──────────────────────────────────── */}
           {sc && (

@@ -35,4 +35,6 @@ export interface TrendAnalysis {
   isSevereDeterioration: boolean;
   /** True when both inflows and net cashflow show consistent upward improvement */
   hasRecoveryMomentum: boolean;
+  /** True when fewer than 2 months contain inflow activity — trend cannot be reliably evaluated and no penalties are applied */
+  isInsufficientHistory: boolean;
 }
