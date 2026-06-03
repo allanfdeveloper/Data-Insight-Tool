@@ -339,6 +339,44 @@ export interface TrendAnalysis {
 }
 
 /**
+ * Cashflow volatility classification based on coefficient of variation of monthly inflows
+ */
+export type VolatilityClassification =
+  (typeof VolatilityClassification)[keyof typeof VolatilityClassification];
+
+export const VolatilityClassification = {
+  LOW: "LOW",
+  MODERATE: "MODERATE",
+  HIGH: "HIGH",
+} as const;
+
+export type VolatilityIntelligenceMonthlyInflowsItem = {
+  month: string;
+  inflow: number;
+};
+
+/**
+ * Cashflow Volatility Intelligence — measures stability and predictability of monthly inflows
+ */
+export interface VolatilityIntelligence {
+  /** Per-month inflow totals used for CV calculation */
+  monthlyInflows: VolatilityIntelligenceMonthlyInflowsItem[];
+  /** Average monthly inflow across the assessment period */
+  meanMonthlyInflow: number;
+  /** Standard deviation of monthly inflows */
+  stdDev: number;
+  /** Coefficient of Variation expressed as a percentage (stdDev / mean * 100) */
+  cv: number;
+  classification: VolatilityClassification;
+  /** Score adjustment applied — 0 for LOW, -2 for MODERATE, -5 for HIGH */
+  scoreModifier: number;
+  /** Human-readable insights about inflow stability */
+  explanations: string[];
+  /** True when fewer than 3 months contain inflow activity — no penalty is applied */
+  isInsufficientHistory: boolean;
+}
+
+/**
  * Configuration values used when this assessment was scored
  */
 export type ScorecardConfigSnapshot = {
@@ -372,6 +410,7 @@ export interface Scorecard {
   trendAnalysis: TrendAnalysis;
   marginHealth: MarginHealth;
   revenueConcentration: RevenueConcentration;
+  volatilityIntelligence: VolatilityIntelligence;
   /** Configuration values used when this assessment was scored */
   configSnapshot: ScorecardConfigSnapshot;
 }

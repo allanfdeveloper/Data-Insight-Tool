@@ -61,6 +61,18 @@ function backfillScorecard(sc: unknown, confidence: string): unknown {
       observations: ["Revenue concentration analysis not available for this assessment — re-upload to generate concentration data."],
     };
   }
+  if (!scorecard.volatilityIntelligence) {
+    scorecard.volatilityIntelligence = {
+      monthlyInflows: [],
+      meanMonthlyInflow: 0,
+      stdDev: 0,
+      cv: 0,
+      classification: "LOW",
+      scoreModifier: 0,
+      explanations: ["Volatility analysis not available for this assessment — re-upload to generate volatility data."],
+      isInsufficientHistory: true,
+    };
+  }
   // Migrate old "cap-review" effects on insufficient-data rules to "confidence-warning"
   if (Array.isArray(scorecard.triggeredRules)) {
     scorecard.triggeredRules = (scorecard.triggeredRules as any[]).map((r) => {

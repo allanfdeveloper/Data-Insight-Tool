@@ -14,6 +14,7 @@ import type { RevenueConcentration } from "./revenueConcentration";
 import type { ScorecardConfigSnapshot } from "./scorecardConfigSnapshot";
 import type { TrendAnalysis } from "./trendAnalysis";
 import type { TriggeredRule } from "./triggeredRule";
+import type { VolatilityIntelligence } from "./volatilityIntelligence";
 
 /**
  * Multi-factor credit assessment scorecard
@@ -36,6 +37,7 @@ export interface Scorecard {
   trendAnalysis: TrendAnalysis;
   marginHealth: MarginHealth;
   revenueConcentration: RevenueConcentration;
+  volatilityIntelligence: VolatilityIntelligence;
   /** Configuration values used when this assessment was scored */
   configSnapshot: ScorecardConfigSnapshot;
 }

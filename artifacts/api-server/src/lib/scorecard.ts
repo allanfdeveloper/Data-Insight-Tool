@@ -287,6 +287,22 @@ export interface ConfigSnapshot {
   consistencyWeight: number;
 }
 
+export type VolatilityClassification = "LOW" | "MODERATE" | "HIGH";
+
+export interface VolatilityIntelligence {
+  /** Per-month inflow totals used for the CV calculation. */
+  monthlyInflows: { month: string; inflow: number }[];
+  meanMonthlyInflow: number;
+  stdDev: number;
+  /** Coefficient of Variation expressed as a percentage. */
+  cv: number;
+  classification: VolatilityClassification;
+  scoreModifier: number;
+  explanations: string[];
+  /** True when fewer than 3 months have inflow activity — no penalty is applied. */
+  isInsufficientHistory: boolean;
+}
+
 export interface Scorecard {
   cashflowStrength: CashflowStrengthFactor;
   activityLevel: ActivityLevelFactor;
@@ -299,6 +315,7 @@ export interface Scorecard {
   trendAnalysis: TrendAnalysis;
   marginHealth: MarginHealth;
   revenueConcentration: RevenueConcentration;
+  volatilityIntelligence: VolatilityIntelligence;
   triggeredRules: TriggeredRule[];
   configSnapshot: ConfigSnapshot;
 }
@@ -674,6 +691,91 @@ function computeRevenueConcentration(rows: TransactionRow[], totalInflow: number
 }
 
 // ---------------------------------------------------------------------------
+// Volatility Intelligence computation
+// ---------------------------------------------------------------------------
+
+const VOLATILITY_LOW_THRESHOLD:      number = 20;  // CV < 20% → LOW
+const VOLATILITY_MODERATE_THRESHOLD: number = 50;  // CV 20–50% → MODERATE, >50% → HIGH
+const VOLATILITY_MODERATE_PENALTY:   number = 2;
+const VOLATILITY_HIGH_PENALTY:       number = 5;
+const VOLATILITY_MIN_MONTHS:         number = 3;   // minimum inflow months required
+
+function computeVolatilityIntelligence(rows: TransactionRow[]): VolatilityIntelligence {
+  // Build monthly inflow totals (inflows only)
+  const monthMap = new Map<string, number>();
+  for (const row of rows) {
+    if (row.type !== "Inflow") continue;
+    const d = new Date(row.date);
+    if (isNaN(d.getTime())) continue;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    monthMap.set(key, (monthMap.get(key) ?? 0) + row.amount);
+  }
+
+  const monthlyInflows = Array.from(monthMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, inflow]) => ({
+      month,
+      inflow: Math.round(inflow * 100) / 100,
+    }));
+
+  const inflowValues = monthlyInflows.map((m) => m.inflow);
+  const n = inflowValues.length;
+  const mean = n > 0 ? inflowValues.reduce((a, b) => a + b, 0) / n : 0;
+
+  if (n < VOLATILITY_MIN_MONTHS) {
+    return {
+      monthlyInflows,
+      meanMonthlyInflow: Math.round(mean * 100) / 100,
+      stdDev:  0,
+      cv:      0,
+      classification:    "LOW",
+      scoreModifier:     0,
+      explanations: [
+        `Insufficient monthly history to evaluate volatility — at least ${VOLATILITY_MIN_MONTHS} months with inflow activity are required.`,
+      ],
+      isInsufficientHistory: true,
+    };
+  }
+
+  const variance = inflowValues.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / n;
+  const stdDev   = Math.sqrt(variance);
+  const cv       = mean > 0 ? (stdDev / mean) * 100 : 0;
+  const cvRounded = Math.round(cv * 10) / 10;
+
+  let classification: VolatilityClassification;
+  let scoreModifier: number;
+  const explanations: string[] = [];
+
+  if (cv < VOLATILITY_LOW_THRESHOLD) {
+    classification = "LOW";
+    scoreModifier  = 0;
+    explanations.push("Monthly inflows remain relatively consistent.");
+    explanations.push(`Revenue appears stable and predictable (CV: ${cvRounded}%).`);
+  } else if (cv <= VOLATILITY_MODERATE_THRESHOLD) {
+    classification = "MODERATE";
+    scoreModifier  = -VOLATILITY_MODERATE_PENALTY;
+    explanations.push("Some month-to-month variation exists but remains manageable.");
+    explanations.push(`Some variation in revenue patterns detected (CV: ${cvRounded}%, −${VOLATILITY_MODERATE_PENALTY} pts).`);
+  } else {
+    classification = "HIGH";
+    scoreModifier  = -VOLATILITY_HIGH_PENALTY;
+    explanations.push("Large swings in monthly revenue create operational uncertainty.");
+    explanations.push(`Revenue fluctuates significantly from month to month (CV: ${cvRounded}%, −${VOLATILITY_HIGH_PENALTY} pts).`);
+  }
+
+  return {
+    monthlyInflows,
+    meanMonthlyInflow: Math.round(mean   * 100) / 100,
+    stdDev:            Math.round(stdDev * 100) / 100,
+    cv:                cvRounded,
+    classification,
+    scoreModifier,
+    explanations,
+    isInsufficientHistory: false,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Main scoring function
 // ---------------------------------------------------------------------------
 
@@ -816,7 +918,10 @@ export function computeScorecard(
   // ── 5b. Revenue Concentration Analysis ─────────────────────────────────
   const revenueConcentration = computeRevenueConcentration(rows, totalInflow);
 
-  // ── 6. Total score (base + trend + margin + concentration modifiers) ───
+  // ── 5c. Volatility Intelligence ─────────────────────────────────────────
+  const volatilityIntelligence = computeVolatilityIntelligence(rows);
+
+  // ── 6. Total score (base + trend + margin + concentration + volatility) ─
   const baseScore   = cfWeighted + actWeighted + conWeighted;
   const totalScore  = Math.round(
     Math.min(100, Math.max(0,
@@ -824,6 +929,7 @@ export function computeScorecard(
       + trendAnalysis.trendScore
       + marginHealth.scoreModifier
       + revenueConcentration.scoreModifier
+      + volatilityIntelligence.scoreModifier
     ))
   );
 
@@ -962,6 +1068,29 @@ export function computeScorecard(
     });
   }
 
+  // Volatility Intelligence rules
+  if (!volatilityIntelligence.isInsufficientHistory) {
+    if (volatilityIntelligence.classification === "HIGH") {
+      triggeredRules.push({
+        rule:        "VOLATILITY_HIGH",
+        effect:      "score-penalty",
+        description: `High inflow volatility detected — revenue fluctuates significantly from month to month (-${VOLATILITY_HIGH_PENALTY} pts). CV: ${volatilityIntelligence.cv}%.`,
+      });
+    } else if (volatilityIntelligence.classification === "MODERATE") {
+      triggeredRules.push({
+        rule:        "VOLATILITY_MODERATE",
+        effect:      "score-penalty",
+        description: `Moderate inflow volatility detected — some variation in monthly revenue (-${VOLATILITY_MODERATE_PENALTY} pts). CV: ${volatilityIntelligence.cv}%.`,
+      });
+    } else {
+      triggeredRules.push({
+        rule:        "VOLATILITY_LOW",
+        effect:      "passed",
+        description: `Inflow volatility is low — monthly revenue is stable and predictable. CV: ${volatilityIntelligence.cv}%.`,
+      });
+    }
+  }
+
   // Hard gate 2 — critically irregular income
   if (highlyIrregular) {
     triggeredRules.push({
@@ -1061,6 +1190,7 @@ export function computeScorecard(
       trendAnalysis,
       marginHealth,
       revenueConcentration,
+      volatilityIntelligence,
       triggeredRules,
       configSnapshot,
     },

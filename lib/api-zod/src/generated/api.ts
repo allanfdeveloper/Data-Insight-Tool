@@ -405,6 +405,51 @@ export const GetAssessmentResponse = zod
             .describe(
               "Revenue concentration risk analysis based on inflow transaction distribution",
             ),
+          volatilityIntelligence: zod
+            .object({
+              monthlyInflows: zod
+                .array(
+                  zod.object({
+                    month: zod.string(),
+                    inflow: zod.number(),
+                  }),
+                )
+                .describe("Per-month inflow totals used for CV calculation"),
+              meanMonthlyInflow: zod
+                .number()
+                .describe(
+                  "Average monthly inflow across the assessment period",
+                ),
+              stdDev: zod
+                .number()
+                .describe("Standard deviation of monthly inflows"),
+              cv: zod
+                .number()
+                .describe(
+                  "Coefficient of Variation expressed as a percentage (stdDev \/ mean \* 100)",
+                ),
+              classification: zod
+                .enum(["LOW", "MODERATE", "HIGH"])
+                .describe(
+                  "Cashflow volatility classification based on coefficient of variation of monthly inflows",
+                ),
+              scoreModifier: zod
+                .number()
+                .describe(
+                  "Score adjustment applied — 0 for LOW, -2 for MODERATE, -5 for HIGH",
+                ),
+              explanations: zod
+                .array(zod.string())
+                .describe("Human-readable insights about inflow stability"),
+              isInsufficientHistory: zod
+                .boolean()
+                .describe(
+                  "True when fewer than 3 months contain inflow activity — no penalty is applied",
+                ),
+            })
+            .describe(
+              "Cashflow Volatility Intelligence — measures stability and predictability of monthly inflows",
+            ),
           configSnapshot: zod
             .object({
               passThreshold: zod.number(),

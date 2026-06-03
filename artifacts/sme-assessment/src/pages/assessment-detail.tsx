@@ -72,6 +72,17 @@ interface RevenueConcentrationData {
   observations: string[];
 }
 
+interface VolatilityIntelligenceData {
+  monthlyInflows: { month: string; inflow: number }[];
+  meanMonthlyInflow: number;
+  stdDev: number;
+  cv: number;
+  classification: "LOW" | "MODERATE" | "HIGH";
+  scoreModifier: number;
+  explanations: string[];
+  isInsufficientHistory: boolean;
+}
+
 interface TriggeredRule {
   rule: string;
   effect: "auto-fail" | "cap-review" | "score-penalty" | "score-bonus" | "passed" | "confidence-warning";
@@ -103,6 +114,7 @@ interface ScorecardData {
   trendAnalysis?: TrendAnalysisData;
   marginHealth?: MarginHealthData;
   revenueConcentration?: RevenueConcentrationData;
+  volatilityIntelligence?: VolatilityIntelligenceData;
   triggeredRules: TriggeredRule[];
   configSnapshot?: {
     passThreshold: number;
@@ -358,12 +370,126 @@ const MOD_CONCENTRATION_LARGEST_PCT  = 25;
 const HIGH_CONCENTRATION_TOP3_PCT    = 80;
 const MOD_CONCENTRATION_TOP3_PCT     = 60;
 
+// ---------- Volatility Intelligence Section ----------
+
+function VolatilityBadge({ classification, isInsufficientHistory }: { classification?: "LOW" | "MODERATE" | "HIGH"; isInsufficientHistory?: boolean }) {
+  if (isInsufficientHistory)
+    return <Badge className="bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-100 text-sm px-3 py-1"><Info className="h-4 w-4 mr-1.5" />Insufficient History</Badge>;
+  if (classification === "HIGH")
+    return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 text-sm px-3 py-1"><Activity className="h-4 w-4 mr-1.5" />HIGH Volatility</Badge>;
+  if (classification === "MODERATE")
+    return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 text-sm px-3 py-1"><Activity className="h-4 w-4 mr-1.5" />MODERATE Volatility</Badge>;
+  return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100 text-sm px-3 py-1"><Activity className="h-4 w-4 mr-1.5" />LOW Volatility</Badge>;
+}
+
+function VolatilitySection({ vi }: { vi: VolatilityIntelligenceData }) {
+  const insufficient = vi.isInsufficientHistory;
+
+  const bgBorder =
+    insufficient              ? "bg-slate-50 border-slate-200" :
+    vi.classification === "HIGH"     ? "bg-red-50 border-red-200" :
+    vi.classification === "MODERATE" ? "bg-amber-50 border-amber-200" :
+                                       "bg-emerald-50 border-emerald-200";
+
+  const chartData = vi.monthlyInflows.map((m) => ({
+    label: formatMonth(m.month),
+    inflow: m.inflow,
+  }));
+
+  const cvColor =
+    vi.cv > 50 ? "text-red-700" :
+    vi.cv > 20 ? "text-amber-700" :
+                  "text-emerald-700";
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+        <Activity className="h-4 w-4 text-cyan-500" />
+        Cashflow Volatility
+      </h2>
+
+      <div className={`rounded-xl border px-5 py-4 ${bgBorder}`}>
+        {/* Header row */}
+        <div className="flex items-start gap-4 flex-wrap justify-between mb-4">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Volatility Classification</p>
+            <VolatilityBadge classification={vi.classification} isInsufficientHistory={insufficient} />
+          </div>
+          {!insufficient && vi.scoreModifier !== 0 && (
+            <span className="text-sm font-semibold text-orange-700 mt-1">
+              {vi.scoreModifier} pts applied
+            </span>
+          )}
+        </div>
+
+        {/* Metrics grid */}
+        {!insufficient && vi.monthlyInflows.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+            <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Mean Monthly Inflow</p>
+              <p className="text-base font-bold text-foreground">{formatCurrency(vi.meanMonthlyInflow)}</p>
+            </div>
+            <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Std Deviation</p>
+              <p className="text-base font-bold text-foreground">{formatCurrency(vi.stdDev)}</p>
+            </div>
+            <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Coeff. of Variation</p>
+              <p className={`text-base font-bold ${cvColor}`}>{vi.cv.toFixed(1)}%</p>
+            </div>
+          </div>
+        )}
+
+        {/* Monthly inflow bar chart */}
+        {!insufficient && chartData.length >= 2 && (
+          <div className="mb-4">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Monthly Inflow Totals</p>
+            <ResponsiveContainer width="100%" height={140}>
+              <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#6b7280" }} axisLine={false} tickLine={false} />
+                <YAxis
+                  tickFormatter={(v: number) => formatK(v)}
+                  tick={{ fontSize: 10, fill: "#6b7280" }}
+                  axisLine={false} tickLine={false} width={52}
+                />
+                <Tooltip
+                  formatter={(v: number) => [formatCurrency(v), "Inflow"]}
+                  labelStyle={{ fontSize: 11, fontWeight: 600 }}
+                  contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid #e5e7eb" }}
+                />
+                <Bar dataKey="inflow" fill="#06b6d4" radius={[3, 3, 0, 0]} name="Inflow" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Explanations */}
+        <ul className="space-y-1">
+          {vi.explanations.map((e, i) => (
+            <li key={i} className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
+              <span className="mt-1.5 h-1 w-1 rounded-full bg-muted-foreground/50 shrink-0" />
+              {e}
+            </li>
+          ))}
+        </ul>
+        {insufficient && (
+          <p className="text-xs text-slate-500 mt-2 italic">
+            No volatility penalty is applied when inflow history is insufficient.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------- Assessment Diagnostics ----------
 
 function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
   const rc = sc.revenueConcentration;
   const mh = sc.marginHealth;
   const ta = sc.trendAnalysis;
+  const vi = sc.volatilityIntelligence;
 
   const insufficient = !!ta?.isInsufficientHistory;
 
@@ -397,6 +523,13 @@ function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
       detail: `Operational margins at ${mh.marginRatio.toFixed(1)}% — healthy financial buffer above operating costs.`,
     });
   }
+  // Volatility positive signal: only when sufficient history and LOW classification
+  if (!vi?.isInsufficientHistory && vi?.classification === "LOW") {
+    positiveSignals.push({
+      label:  "Stable Revenue Patterns",
+      detail: `Revenue patterns are stable and predictable (CV: ${vi.cv.toFixed(1)}%).`,
+    });
+  }
 
   // ── Risk signals ─────────────────────────────────────────────────────
   if (rc && rc.risk !== "LOW" && rc.inflowCount > 0) {
@@ -411,13 +544,19 @@ function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
       detail: mh.observations[0] ?? "Limited financial buffer for operational disruptions.",
     });
   }
-  // Volatility and deterioration: only valid when sufficient monthly history exists
-  if (!insufficient && ta?.volatility === "high") {
+  // Volatility risk signals driven by VolatilityIntelligence (not trendAnalysis.volatility)
+  if (!vi?.isInsufficientHistory && vi?.classification === "HIGH") {
     riskSignals.push({
-      label:  "High Volatility",
-      detail: "Inconsistent month-to-month cashflow patterns — revenue is unpredictable.",
+      label:  "High Revenue Volatility",
+      detail: `Revenue is highly unpredictable and varies significantly between months (CV: ${vi.cv.toFixed(1)}%).`,
+    });
+  } else if (!vi?.isInsufficientHistory && vi?.classification === "MODERATE") {
+    riskSignals.push({
+      label:  "Moderate Revenue Volatility",
+      detail: `Moderate fluctuations in monthly revenue detected (CV: ${vi.cv.toFixed(1)}%).`,
     });
   }
+  // Deterioration: only valid when sufficient trend history
   if (!insufficient && (ta?.isSevereDeterioration || ta?.classification === "NEGATIVE")) {
     riskSignals.push({
       label:  ta?.isSevereDeterioration ? "Severe Deterioration" : "Negative Trend",
@@ -429,7 +568,13 @@ function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
   if (insufficient) {
     infoSignals.push({
       label:  "Insufficient History for Trend Analysis",
-      detail: "Fewer than 2 months of inflow activity were detected — trend direction, volatility, and deterioration risk cannot be reliably evaluated. No trend-related penalties are applied.",
+      detail: "Fewer than 2 months of inflow activity were detected — trend direction and deterioration risk cannot be reliably evaluated. No trend-related penalties are applied.",
+    });
+  }
+  if (vi?.isInsufficientHistory) {
+    infoSignals.push({
+      label:  "Insufficient History for Volatility Analysis",
+      detail: "Fewer than 3 months of inflow activity were detected — inflow volatility cannot be reliably evaluated. No volatility penalties are applied.",
     });
   }
 
@@ -857,6 +1002,9 @@ export default function AssessmentDetailPage() {
 
           {/* ── Revenue Concentration ────────────────────────────────── */}
           {sc?.revenueConcentration && <ConcentrationSection rc={sc.revenueConcentration} />}
+
+          {/* ── Cashflow Volatility ──────────────────────────────────── */}
+          {sc?.volatilityIntelligence && <VolatilitySection vi={sc.volatilityIntelligence} />}
 
           {/* ── Trend Intelligence ───────────────────────────────────── */}
           {trend && <TrendSection trend={trend} />}

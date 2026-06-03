@@ -41,3 +41,6 @@ export * from "./triggeredRule";
 export * from "./triggeredRuleEffect";
 export * from "./uploadAssessmentBody";
 export * from "./userProfile";
+export * from "./volatilityClassification";
+export * from "./volatilityIntelligence";
+export * from "./volatilityIntelligenceMonthlyInflowsItem";

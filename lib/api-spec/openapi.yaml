@@ -768,6 +768,60 @@ components:
         - hasRecoveryMomentum
         - isInsufficientHistory
 
+    VolatilityClassification:
+      type: string
+      enum: [LOW, MODERATE, HIGH]
+      description: Cashflow volatility classification based on coefficient of variation of monthly inflows
+
+    VolatilityIntelligence:
+      type: object
+      description: Cashflow Volatility Intelligence — measures stability and predictability of monthly inflows
+      properties:
+        monthlyInflows:
+          type: array
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+              inflow:
+                type: number
+            required:
+              - month
+              - inflow
+          description: Per-month inflow totals used for CV calculation
+        meanMonthlyInflow:
+          type: number
+          description: Average monthly inflow across the assessment period
+        stdDev:
+          type: number
+          description: Standard deviation of monthly inflows
+        cv:
+          type: number
+          description: Coefficient of Variation expressed as a percentage (stdDev / mean * 100)
+        classification:
+          $ref: "#/components/schemas/VolatilityClassification"
+        scoreModifier:
+          type: number
+          description: Score adjustment applied — 0 for LOW, -2 for MODERATE, -5 for HIGH
+        explanations:
+          type: array
+          items:
+            type: string
+          description: Human-readable insights about inflow stability
+        isInsufficientHistory:
+          type: boolean
+          description: True when fewer than 3 months contain inflow activity — no penalty is applied
+      required:
+        - monthlyInflows
+        - meanMonthlyInflow
+        - stdDev
+        - cv
+        - classification
+        - scoreModifier
+        - explanations
+        - isInsufficientHistory
+
     Scorecard:
       type: object
       description: Multi-factor credit assessment scorecard
@@ -805,6 +859,8 @@ components:
           $ref: "#/components/schemas/MarginHealth"
         revenueConcentration:
           $ref: "#/components/schemas/RevenueConcentration"
+        volatilityIntelligence:
+          $ref: "#/components/schemas/VolatilityIntelligence"
         configSnapshot:
           type: object
           description: Configuration values used when this assessment was scored
@@ -843,6 +899,7 @@ components:
         - trendAnalysis
         - marginHealth
         - revenueConcentration
+        - volatilityIntelligence
         - triggeredRules
         - configSnapshot
 
