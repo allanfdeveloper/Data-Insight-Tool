@@ -48,6 +48,18 @@ function backfillScorecard(sc: unknown, confidence: string): unknown {
       isRecovery: false,
     };
   }
+  if (!scorecard.revenueConcentration) {
+    scorecard.revenueConcentration = {
+      inflowCount: 0,
+      largestInflow: 0,
+      largestInflowPct: 0,
+      top3Inflow: 0,
+      top3Pct: 0,
+      risk: "LOW",
+      scoreModifier: 0,
+      observations: ["Revenue concentration analysis not available for this assessment — re-upload to generate concentration data."],
+    };
+  }
   // Migrate old "cap-review" effects on insufficient-data rules to "confidence-warning"
   if (Array.isArray(scorecard.triggeredRules)) {
     scorecard.triggeredRules = (scorecard.triggeredRules as any[]).map((r) => {

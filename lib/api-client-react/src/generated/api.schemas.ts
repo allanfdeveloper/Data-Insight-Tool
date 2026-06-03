@@ -173,6 +173,40 @@ export type ConsistencyFactor = ScorecardFactor & {
 };
 
 /**
+ * Revenue concentration risk classification based on inflow distribution. LOW = largest inflow < 25% and top 3 < 60% of total inflows. MODERATE = largest inflow 25–40% or top 3 60–80% of total inflows. HIGH = largest inflow > 40% or top 3 > 80% of total inflows.
+
+ */
+export type ConcentrationRisk =
+  (typeof ConcentrationRisk)[keyof typeof ConcentrationRisk];
+
+export const ConcentrationRisk = {
+  LOW: "LOW",
+  MODERATE: "MODERATE",
+  HIGH: "HIGH",
+} as const;
+
+/**
+ * Revenue concentration risk analysis based on inflow transaction distribution
+ */
+export interface RevenueConcentration {
+  /** Total number of inflow transactions analysed */
+  inflowCount: number;
+  /** Amount of the single largest inflow transaction */
+  largestInflow: number;
+  /** Largest inflow as a percentage of total inflows */
+  largestInflowPct: number;
+  /** Combined amount of the top 3 largest inflow transactions */
+  top3Inflow: number;
+  /** Top 3 inflows as a percentage of total inflows */
+  top3Pct: number;
+  risk: ConcentrationRisk;
+  /** Score adjustment applied (0, −2, or −4) */
+  scoreModifier: number;
+  /** Human-readable explanations of the concentration finding */
+  observations: string[];
+}
+
+/**
  * Operational margin strength classification based on net cashflow as a percentage of total inflows. Strong = above 30%. Moderate = 15%–30%. Thin = below 15%.
 
  */
@@ -335,6 +369,7 @@ export interface Scorecard {
   triggeredRules: TriggeredRule[];
   trendAnalysis: TrendAnalysis;
   marginHealth: MarginHealth;
+  revenueConcentration: RevenueConcentration;
   /** Configuration values used when this assessment was scored */
   configSnapshot: ScorecardConfigSnapshot;
 }

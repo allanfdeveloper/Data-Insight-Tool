@@ -1,0 +1,2 @@
+- [Revenue Concentration scoring](revenue-concentration.md) — additive modifier only (no auto-fail); classification uses OR logic for HIGH/MODERATE thresholds.
+- [Backfill pattern for new scorecard fields](scorecard-backfill.md) — every new scorecard field must be backfilled in assessments.ts and must use the exact Zod-required type (no null for number fields).

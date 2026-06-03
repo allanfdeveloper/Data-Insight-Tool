@@ -10,6 +10,7 @@ import type { AssessmentConfidence } from "./assessmentConfidence";
 import type { CashflowStrengthFactor } from "./cashflowStrengthFactor";
 import type { ConsistencyFactor } from "./consistencyFactor";
 import type { MarginHealth } from "./marginHealth";
+import type { RevenueConcentration } from "./revenueConcentration";
 import type { ScorecardConfigSnapshot } from "./scorecardConfigSnapshot";
 import type { TrendAnalysis } from "./trendAnalysis";
 import type { TriggeredRule } from "./triggeredRule";
@@ -34,6 +35,7 @@ export interface Scorecard {
   triggeredRules: TriggeredRule[];
   trendAnalysis: TrendAnalysis;
   marginHealth: MarginHealth;
+  revenueConcentration: RevenueConcentration;
   /** Configuration values used when this assessment was scored */
   configSnapshot: ScorecardConfigSnapshot;
 }

@@ -3,11 +3,12 @@
  *
  * Evaluation layers (all rule-based, fully explainable):
  *
- *   1. Cashflow Strength   — weighted factor (configurable %)
- *   2. Activity Level      — weighted factor (configurable %)
- *   3. Income Consistency  — weighted factor (configurable %)
- *   4. Trend Intelligence  — additive modifier: POSITIVE +4, NEGATIVE −4
- *   5. Margin Health       — additive modifier: see MARGIN_* constants
+ *   1. Cashflow Strength      — weighted factor (configurable %)
+ *   2. Activity Level         — weighted factor (configurable %)
+ *   3. Income Consistency     — weighted factor (configurable %)
+ *   4. Trend Intelligence     — additive modifier: POSITIVE +4, NEGATIVE −4
+ *   5. Margin Health          — additive modifier: see MARGIN_* constants
+ *   6. Revenue Concentration  — additive modifier: HIGH −4, MODERATE −2, LOW 0
  *
  * Confidence layer (data-sufficiency check, does not change verdict):
  *   HIGH   — meets both minMonths AND minTransactions
@@ -65,6 +66,18 @@ const VOLATILITY_HIGH_CV       = 0.60;
 const VOLATILITY_MODERATE_CV   = 0.25;
 const TREND_SCORE_BONUS        = 4;
 const TREND_SCORE_PENALTY      = 4;
+
+// ---------------------------------------------------------------------------
+// Revenue concentration constants
+// ---------------------------------------------------------------------------
+
+const HIGH_CONCENTRATION_LARGEST_PCT = 40;   // > 40% from single inflow → HIGH
+const HIGH_CONCENTRATION_TOP3_PCT    = 80;   // > 80% from top 3         → HIGH
+const MOD_CONCENTRATION_LARGEST_PCT  = 25;   // ≥ 25% from single inflow → MODERATE
+const MOD_CONCENTRATION_TOP3_PCT     = 60;   // ≥ 60% from top 3         → MODERATE
+
+const CONCENTRATION_MODERATE_PENALTY = 2;
+const CONCENTRATION_HIGH_PENALTY     = 4;
 
 // ---------------------------------------------------------------------------
 // Margin health constants
@@ -190,6 +203,7 @@ function normalizeConsistency(cv: number): number {
 export type AssessmentConfidence  = "HIGH" | "MEDIUM" | "LOW";
 export type TrendClassification   = "POSITIVE" | "STABLE" | "NEGATIVE";
 export type MarginClassification  = "Strong" | "Moderate" | "Thin";
+export type ConcentrationRisk     = "LOW" | "MODERATE" | "HIGH";
 
 export interface MonthlyDataPoint {
   month: string;   // YYYY-MM
@@ -218,6 +232,17 @@ export interface MarginHealth {
   observations: string[];
   isSevereDeterioration: boolean;
   isRecovery: boolean;
+}
+
+export interface RevenueConcentration {
+  inflowCount: number;
+  largestInflow: number;
+  largestInflowPct: number;
+  top3Inflow: number;
+  top3Pct: number;
+  risk: ConcentrationRisk;
+  scoreModifier: number;
+  observations: string[];
 }
 
 export interface TriggeredRule {
@@ -271,6 +296,7 @@ export interface Scorecard {
   confidenceReasons: string[];
   trendAnalysis: TrendAnalysis;
   marginHealth: MarginHealth;
+  revenueConcentration: RevenueConcentration;
   triggeredRules: TriggeredRule[];
   configSnapshot: ConfigSnapshot;
 }
@@ -536,6 +562,90 @@ function computeMarginHealth(
 }
 
 // ---------------------------------------------------------------------------
+// Revenue concentration computation
+// ---------------------------------------------------------------------------
+
+function computeRevenueConcentration(rows: TransactionRow[], totalInflow: number): RevenueConcentration {
+  const inflowAmounts = rows
+    .filter((r) => r.type === "Inflow" && r.amount > 0)
+    .map((r) => r.amount)
+    .sort((a, b) => b - a);
+
+  const inflowCount = inflowAmounts.length;
+
+  if (inflowCount === 0 || totalInflow <= 0) {
+    return {
+      inflowCount: 0,
+      largestInflow: 0,
+      largestInflowPct: 0,
+      top3Inflow: 0,
+      top3Pct: 0,
+      risk: "LOW",
+      scoreModifier: 0,
+      observations: ["No inflow transactions found — concentration analysis not applicable."],
+    };
+  }
+
+  const largestInflow    = inflowAmounts[0];
+  const largestInflowPct = Math.round((largestInflow / totalInflow) * 10000) / 100;
+
+  const top3Amount = inflowAmounts.slice(0, 3).reduce((a, b) => a + b, 0);
+  const top3Pct    = Math.round((top3Amount / totalInflow) * 10000) / 100;
+
+  let risk: ConcentrationRisk;
+  let scoreModifier: number;
+  const observations: string[] = [];
+
+  if (largestInflowPct > HIGH_CONCENTRATION_LARGEST_PCT || top3Pct > HIGH_CONCENTRATION_TOP3_PCT) {
+    risk          = "HIGH";
+    scoreModifier = -CONCENTRATION_HIGH_PENALTY;
+    observations.push("Business appears highly dependent on a small number of inflows.");
+    if (largestInflowPct > HIGH_CONCENTRATION_LARGEST_PCT) {
+      observations.push(
+        `Largest single inflow represents ${largestInflowPct.toFixed(1)}% of total revenue — significant single-source dependency detected.`
+      );
+    }
+    if (top3Pct > HIGH_CONCENTRATION_TOP3_PCT) {
+      observations.push(
+        `Top 3 inflows account for ${top3Pct.toFixed(1)}% of total revenue — highly concentrated revenue base.`
+      );
+    }
+  } else if (largestInflowPct >= MOD_CONCENTRATION_LARGEST_PCT || top3Pct >= MOD_CONCENTRATION_TOP3_PCT) {
+    risk          = "MODERATE";
+    scoreModifier = -CONCENTRATION_MODERATE_PENALTY;
+    observations.push("Moderate dependence on a small number of inflows detected.");
+    if (largestInflowPct >= MOD_CONCENTRATION_LARGEST_PCT) {
+      observations.push(
+        `Largest single inflow accounts for ${largestInflowPct.toFixed(1)}% of total revenue — monitor for single-customer risk.`
+      );
+    }
+    if (top3Pct >= MOD_CONCENTRATION_TOP3_PCT) {
+      observations.push(
+        `Top 3 inflows represent ${top3Pct.toFixed(1)}% of total revenue — moderate revenue concentration.`
+      );
+    }
+  } else {
+    risk          = "LOW";
+    scoreModifier = 0;
+    observations.push("Revenue sources appear reasonably diversified.");
+    observations.push(
+      `Largest single inflow represents ${largestInflowPct.toFixed(1)}% of total revenue — within acceptable concentration limits.`
+    );
+  }
+
+  return {
+    inflowCount,
+    largestInflow:    Math.round(largestInflow    * 100) / 100,
+    largestInflowPct,
+    top3Inflow:       Math.round(top3Amount       * 100) / 100,
+    top3Pct,
+    risk,
+    scoreModifier,
+    observations,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Main scoring function
 // ---------------------------------------------------------------------------
 
@@ -675,10 +785,18 @@ export function computeScorecard(
   // ── 5. Margin Health Intelligence ──────────────────────────────────────
   const marginHealth = computeMarginHealth(totalInflow, netCashflow, trendAnalysis);
 
-  // ── 6. Total score (base + trend + margin modifiers) ───────────────────
+  // ── 5b. Revenue Concentration Analysis ─────────────────────────────────
+  const revenueConcentration = computeRevenueConcentration(rows, totalInflow);
+
+  // ── 6. Total score (base + trend + margin + concentration modifiers) ───
   const baseScore   = cfWeighted + actWeighted + conWeighted;
   const totalScore  = Math.round(
-    Math.min(100, Math.max(0, baseScore + trendAnalysis.trendScore + marginHealth.scoreModifier))
+    Math.min(100, Math.max(0,
+      baseScore
+      + trendAnalysis.trendScore
+      + marginHealth.scoreModifier
+      + revenueConcentration.scoreModifier
+    ))
   );
 
   // ── 7. Confidence layer ─────────────────────────────────────────────────
@@ -795,6 +913,27 @@ export function computeScorecard(
     });
   }
 
+  // Revenue concentration rules
+  if (revenueConcentration.risk === "HIGH") {
+    triggeredRules.push({
+      rule:        "CONCENTRATION_HIGH",
+      effect:      "score-penalty",
+      description: `High revenue concentration detected — business appears highly dependent on a small number of inflows (-${CONCENTRATION_HIGH_PENALTY} pts). ${revenueConcentration.observations[1] ?? ""}`,
+    });
+  } else if (revenueConcentration.risk === "MODERATE") {
+    triggeredRules.push({
+      rule:        "CONCENTRATION_MODERATE",
+      effect:      "score-penalty",
+      description: `Moderate revenue concentration detected — some dependency on a small number of inflows (-${CONCENTRATION_MODERATE_PENALTY} pts). ${revenueConcentration.observations[1] ?? ""}`,
+    });
+  } else if (revenueConcentration.inflowCount > 0) {
+    triggeredRules.push({
+      rule:        "CONCENTRATION_LOW",
+      effect:      "passed",
+      description: `Revenue concentration is within acceptable limits — inflows appear reasonably diversified. Largest inflow: ${revenueConcentration.largestInflowPct.toFixed(1)}% of total.`,
+    });
+  }
+
   // Hard gate 2 — critically irregular income
   if (highlyIrregular) {
     triggeredRules.push({
@@ -893,6 +1032,7 @@ export function computeScorecard(
       confidenceReasons,
       trendAnalysis,
       marginHealth,
+      revenueConcentration,
       triggeredRules,
       configSnapshot,
     },

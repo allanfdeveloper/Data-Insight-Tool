@@ -591,6 +591,54 @@ components:
             - irregularityScore
             - irregularityFlags
 
+    ConcentrationRisk:
+      type: string
+      enum: [LOW, MODERATE, HIGH]
+      description: >
+        Revenue concentration risk classification based on inflow distribution.
+        LOW = largest inflow < 25% and top 3 < 60% of total inflows.
+        MODERATE = largest inflow 25–40% or top 3 60–80% of total inflows.
+        HIGH = largest inflow > 40% or top 3 > 80% of total inflows.
+
+    RevenueConcentration:
+      type: object
+      description: Revenue concentration risk analysis based on inflow transaction distribution
+      properties:
+        inflowCount:
+          type: integer
+          description: Total number of inflow transactions analysed
+        largestInflow:
+          type: number
+          description: Amount of the single largest inflow transaction
+        largestInflowPct:
+          type: number
+          description: Largest inflow as a percentage of total inflows
+        top3Inflow:
+          type: number
+          description: Combined amount of the top 3 largest inflow transactions
+        top3Pct:
+          type: number
+          description: Top 3 inflows as a percentage of total inflows
+        risk:
+          $ref: "#/components/schemas/ConcentrationRisk"
+        scoreModifier:
+          type: number
+          description: Score adjustment applied (0, −2, or −4)
+        observations:
+          type: array
+          items:
+            type: string
+          description: Human-readable explanations of the concentration finding
+      required:
+        - inflowCount
+        - largestInflow
+        - largestInflowPct
+        - top3Inflow
+        - top3Pct
+        - risk
+        - scoreModifier
+        - observations
+
     MarginClassification:
       type: string
       enum: [Strong, Moderate, Thin]
@@ -751,6 +799,8 @@ components:
           $ref: "#/components/schemas/TrendAnalysis"
         marginHealth:
           $ref: "#/components/schemas/MarginHealth"
+        revenueConcentration:
+          $ref: "#/components/schemas/RevenueConcentration"
         configSnapshot:
           type: object
           description: Configuration values used when this assessment was scored
@@ -788,6 +838,7 @@ components:
         - confidenceReasons
         - trendAnalysis
         - marginHealth
+        - revenueConcentration
         - triggeredRules
         - configSnapshot
 

@@ -6,7 +6,7 @@ import {
   TrendingUp, TrendingDown, Hash, Calendar, FileSpreadsheet,
   Activity, BarChart3, RefreshCw, AlertTriangle, ShieldX,
   ShieldCheck, ShieldAlert, Info, ArrowUpRight, ArrowDownRight,
-  Minus, Zap, Shield,
+  Minus, Zap, Shield, PieChart, Eye,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,19 @@ interface MarginHealthData {
   isRecovery: boolean;
 }
 
+type ConcentrationRisk = "LOW" | "MODERATE" | "HIGH";
+
+interface RevenueConcentrationData {
+  inflowCount: number;
+  largestInflow: number;
+  largestInflowPct: number;
+  top3Inflow: number;
+  top3Pct: number;
+  risk: ConcentrationRisk;
+  scoreModifier: number;
+  observations: string[];
+}
+
 interface TriggeredRule {
   rule: string;
   effect: "auto-fail" | "cap-review" | "score-penalty" | "score-bonus" | "passed" | "confidence-warning";
@@ -88,6 +101,7 @@ interface ScorecardData {
   confidenceReasons: string[];
   trendAnalysis?: TrendAnalysisData;
   marginHealth?: MarginHealthData;
+  revenueConcentration?: RevenueConcentrationData;
   triggeredRules: TriggeredRule[];
   configSnapshot?: {
     passThreshold: number;
@@ -252,6 +266,212 @@ function ChartTooltip({ active, payload, label }: any) {
           <span className="font-medium" style={{ color: p.color }}>{formatK(p.value)}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------- Concentration Section ----------
+
+function ConcentrationRiskBadge({ risk }: { risk: ConcentrationRisk }) {
+  if (risk === "LOW")
+    return <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 text-sm px-3 py-1"><CheckCircle2 className="h-4 w-4 mr-1.5" />LOW RISK</Badge>;
+  if (risk === "MODERATE")
+    return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 text-sm px-3 py-1"><AlertCircle className="h-4 w-4 mr-1.5" />MODERATE RISK</Badge>;
+  return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 text-sm px-3 py-1"><AlertTriangle className="h-4 w-4 mr-1.5" />HIGH RISK</Badge>;
+}
+
+function ConcentrationSection({ rc }: { rc: RevenueConcentrationData }) {
+  const bgBorder =
+    rc.risk === "LOW"      ? "bg-green-50 border-green-200" :
+    rc.risk === "MODERATE" ? "bg-amber-50 border-amber-200" :
+                              "bg-red-50 border-red-200";
+
+  const modifierColor = rc.scoreModifier < 0 ? "text-orange-700" : "text-slate-500";
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+        <PieChart className="h-4 w-4 text-violet-500" />
+        Revenue Concentration
+      </h2>
+
+      <div className={`rounded-xl border px-5 py-4 ${bgBorder}`}>
+        {/* Header row */}
+        <div className="flex items-start gap-4 flex-wrap justify-between mb-4">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Concentration Risk</p>
+            <ConcentrationRiskBadge risk={rc.risk} />
+          </div>
+          {rc.scoreModifier !== 0 && (
+            <span className={`text-sm font-semibold ${modifierColor} mt-1`}>
+              {rc.scoreModifier} pts applied
+            </span>
+          )}
+        </div>
+
+        {/* Metrics grid */}
+        {rc.inflowCount > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Largest Inflow</p>
+              <p className="text-base font-bold text-foreground">{formatCurrency(rc.largestInflow)}</p>
+            </div>
+            <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Largest Inflow %</p>
+              <p className={`text-base font-bold ${rc.largestInflowPct > HIGH_CONCENTRATION_LARGEST_PCT ? "text-red-700" : rc.largestInflowPct >= MOD_CONCENTRATION_LARGEST_PCT ? "text-amber-700" : "text-green-700"}`}>
+                {rc.largestInflowPct.toFixed(1)}%
+              </p>
+            </div>
+            <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Top 3 Inflows</p>
+              <p className="text-base font-bold text-foreground">{formatCurrency(rc.top3Inflow)}</p>
+            </div>
+            <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Top 3 %</p>
+              <p className={`text-base font-bold ${rc.top3Pct > HIGH_CONCENTRATION_TOP3_PCT ? "text-red-700" : rc.top3Pct >= MOD_CONCENTRATION_TOP3_PCT ? "text-amber-700" : "text-green-700"}`}>
+                {rc.top3Pct.toFixed(1)}%
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Observations */}
+        <ul className="space-y-1">
+          {rc.observations.map((obs, i) => (
+            <li key={i} className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
+              <span className="mt-1.5 h-1 w-1 rounded-full bg-muted-foreground/50 shrink-0" />
+              {obs}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// Thresholds referenced in JSX (mirroring engine constants for coloring)
+const HIGH_CONCENTRATION_LARGEST_PCT = 40;
+const MOD_CONCENTRATION_LARGEST_PCT  = 25;
+const HIGH_CONCENTRATION_TOP3_PCT    = 80;
+const MOD_CONCENTRATION_TOP3_PCT     = 60;
+
+// ---------- Assessment Diagnostics ----------
+
+function AssessmentDiagnostics({ sc, assessment }: { sc: ScorecardData; assessment: any }) {
+  const rc   = sc.revenueConcentration;
+  const mh   = sc.marginHealth;
+  const ta   = sc.trendAnalysis;
+
+  const positiveSignals: { label: string; detail: string }[] = [];
+  const riskSignals: { label: string; detail: string }[] = [];
+
+  // ── Positive signals ─────────────────────────────────────────────────
+  if (sc.cashflowStrength.normalizedScore >= 70) {
+    positiveSignals.push({
+      label:  "Strong Cashflow",
+      detail: `Net cashflow ratio ${(sc.cashflowStrength.netRatio * 100).toFixed(1)}% — business retains a healthy surplus from operations.`,
+    });
+  }
+  if (sc.consistency.normalizedScore >= 65) {
+    positiveSignals.push({
+      label:  "Consistent Income",
+      detail: "Regular and predictable inflow patterns detected across the assessment period.",
+    });
+  }
+  if (ta?.classification === "POSITIVE") {
+    positiveSignals.push({
+      label:  "Positive Trend",
+      detail: ta.explanations[0] ?? "Cashflow is improving over the assessment period.",
+    });
+  }
+  if (mh?.classification === "Strong" && !mh?.isSevereDeterioration) {
+    positiveSignals.push({
+      label:  "Strong Resilience",
+      detail: `Operational margins at ${mh.marginRatio.toFixed(1)}% — healthy financial buffer above operating costs.`,
+    });
+  }
+
+  // ── Risk signals ─────────────────────────────────────────────────────
+  if (rc && rc.risk !== "LOW" && rc.inflowCount > 0) {
+    riskSignals.push({
+      label:  `Revenue Concentration (${rc.risk})`,
+      detail: rc.observations[0] ?? "Dependence on a small number of inflows detected.",
+    });
+  }
+  if (mh?.classification === "Thin") {
+    riskSignals.push({
+      label:  "Thin Margins",
+      detail: mh.observations[0] ?? "Limited financial buffer for operational disruptions.",
+    });
+  }
+  if (ta?.volatility === "high") {
+    riskSignals.push({
+      label:  "High Volatility",
+      detail: "Inconsistent month-to-month cashflow patterns — revenue is unpredictable.",
+    });
+  }
+  if (ta?.isSevereDeterioration || ta?.classification === "NEGATIVE") {
+    riskSignals.push({
+      label:  ta?.isSevereDeterioration ? "Severe Deterioration" : "Negative Trend",
+      detail: ta?.explanations[0] ?? "Cashflow is showing a declining trajectory.",
+    });
+  }
+
+  const hasAny = positiveSignals.length > 0 || riskSignals.length > 0;
+  if (!hasAny) return null;
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+        <Eye className="h-4 w-4 text-slate-500" />
+        Assessment Diagnostics
+      </h2>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Positive Signals */}
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+          <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" /> Positive Signals
+          </p>
+          {positiveSignals.length > 0 ? (
+            <div className="space-y-2.5">
+              {positiveSignals.map((s, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-900">{s.label}</p>
+                    <p className="text-xs text-emerald-700 leading-relaxed">{s.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-emerald-700 italic">No strong positive signals detected for this assessment.</p>
+          )}
+        </div>
+
+        {/* Risk Signals */}
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+          <p className="text-xs font-semibold text-orange-800 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5" /> Risk Signals
+          </p>
+          {riskSignals.length > 0 ? (
+            <div className="space-y-2.5">
+              {riskSignals.map((s, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-orange-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-orange-900">{s.label}</p>
+                    <p className="text-xs text-orange-700 leading-relaxed">{s.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-orange-700 italic">No significant risk signals detected for this assessment.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -587,10 +807,16 @@ export default function AssessmentDetailPage() {
           </div>
 
           {/* ── Financial Resilience ─────────────────────────────────── */}
-          {sc.marginHealth && <ResilienceSection mh={sc.marginHealth} />}
+          {sc?.marginHealth && <ResilienceSection mh={sc.marginHealth} />}
+
+          {/* ── Revenue Concentration ────────────────────────────────── */}
+          {sc?.revenueConcentration && <ConcentrationSection rc={sc.revenueConcentration} />}
 
           {/* ── Trend Intelligence ───────────────────────────────────── */}
           {trend && <TrendSection trend={trend} />}
+
+          {/* ── Assessment Diagnostics ───────────────────────────────── */}
+          {sc && <AssessmentDiagnostics sc={sc} assessment={assessment} />}
 
           {/* ── Scorecard breakdown ──────────────────────────────────── */}
           {sc && (

@@ -364,6 +364,42 @@ export const GetAssessmentResponse = zod
             .describe(
               "Financial resilience intelligence based on operational margin analysis",
             ),
+          revenueConcentration: zod
+            .object({
+              inflowCount: zod
+                .number()
+                .describe("Total number of inflow transactions analysed"),
+              largestInflow: zod
+                .number()
+                .describe("Amount of the single largest inflow transaction"),
+              largestInflowPct: zod
+                .number()
+                .describe("Largest inflow as a percentage of total inflows"),
+              top3Inflow: zod
+                .number()
+                .describe(
+                  "Combined amount of the top 3 largest inflow transactions",
+                ),
+              top3Pct: zod
+                .number()
+                .describe("Top 3 inflows as a percentage of total inflows"),
+              risk: zod
+                .enum(["LOW", "MODERATE", "HIGH"])
+                .describe(
+                  "Revenue concentration risk classification based on inflow distribution. LOW = largest inflow < 25% and top 3 < 60% of total inflows. MODERATE = largest inflow 25–40% or top 3 60–80% of total inflows. HIGH = largest inflow > 40% or top 3 > 80% of total inflows.\n",
+                ),
+              scoreModifier: zod
+                .number()
+                .describe("Score adjustment applied (0, −2, or −4)"),
+              observations: zod
+                .array(zod.string())
+                .describe(
+                  "Human-readable explanations of the concentration finding",
+                ),
+            })
+            .describe(
+              "Revenue concentration risk analysis based on inflow transaction distribution",
+            ),
           configSnapshot: zod
             .object({
               passThreshold: zod.number(),
