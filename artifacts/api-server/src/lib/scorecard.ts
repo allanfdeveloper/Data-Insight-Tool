@@ -247,6 +247,19 @@ export interface RevenueConcentration {
   observations: string[];
 }
 
+export type ExpenseDependencyRisk = "LOW" | "MODERATE" | "HIGH";
+
+export interface ExpenseDependency {
+  outflowCount: number;
+  largestExpense: number;
+  largestExpensePct: number;
+  top3Expense: number;
+  top3Pct: number;
+  risk: ExpenseDependencyRisk;
+  scoreModifier: number;
+  observations: string[];
+}
+
 export interface TriggeredRule {
   rule: string;
   effect: "auto-fail" | "cap-review" | "score-penalty" | "score-bonus" | "passed" | "confidence-warning";
@@ -316,6 +329,7 @@ export interface Scorecard {
   marginHealth: MarginHealth;
   revenueConcentration: RevenueConcentration;
   volatilityIntelligence: VolatilityIntelligence;
+  expenseDependency: ExpenseDependency;
   triggeredRules: TriggeredRule[];
   configSnapshot: ConfigSnapshot;
 }
@@ -776,6 +790,80 @@ function computeVolatilityIntelligence(rows: TransactionRow[]): VolatilityIntell
 }
 
 // ---------------------------------------------------------------------------
+// Expense Dependency Intelligence computation
+// ---------------------------------------------------------------------------
+
+const HIGH_EXPENSE_LARGEST_PCT = 40;  // > 40% → HIGH
+const MOD_EXPENSE_LARGEST_PCT  = 25;  // >= 25% → MODERATE
+const EXPENSE_MODERATE_PENALTY = 2;
+const EXPENSE_HIGH_PENALTY     = 4;
+
+function computeExpenseDependency(rows: TransactionRow[], totalOutflow: number): ExpenseDependency {
+  if (totalOutflow === 0) {
+    return {
+      outflowCount: 0,
+      largestExpense: 0,
+      largestExpensePct: 0,
+      top3Expense: 0,
+      top3Pct: 0,
+      risk: "LOW",
+      scoreModifier: 0,
+      observations: ["No outflow data available for expense dependency analysis."],
+    };
+  }
+
+  // Sort individual outflow transactions descending by amount
+  const outflowAmounts = rows
+    .filter((r) => r.type === "Outflow" && r.amount > 0)
+    .map((r) => r.amount)
+    .sort((a, b) => b - a);
+
+  const outflowCount      = outflowAmounts.length;
+  const largestExpense    = outflowAmounts[0] ?? 0;
+  const largestExpensePct = (largestExpense / totalOutflow) * 100;
+  const top3Amount        = outflowAmounts.slice(0, 3).reduce((a, b) => a + b, 0);
+  const top3Pct           = (top3Amount / totalOutflow) * 100;
+
+  let risk: ExpenseDependencyRisk;
+  let scoreModifier: number;
+  const observations: string[] = [];
+
+  if (largestExpensePct > HIGH_EXPENSE_LARGEST_PCT) {
+    risk          = "HIGH";
+    scoreModifier = -EXPENSE_HIGH_PENALTY;
+    observations.push("Business appears highly dependent on a small number of expenses. Operational disruption risk is elevated.");
+    observations.push(
+      `Largest single expense represents ${largestExpensePct.toFixed(1)}% of total outflows — significant single-expense dependency detected.`
+    );
+  } else if (largestExpensePct >= MOD_EXPENSE_LARGEST_PCT) {
+    risk          = "MODERATE";
+    scoreModifier = -EXPENSE_MODERATE_PENALTY;
+    observations.push("Business shows moderate reliance on a small number of expense categories.");
+    observations.push(
+      `Largest single expense accounts for ${largestExpensePct.toFixed(1)}% of total outflows — monitor for expense concentration.`
+    );
+  } else {
+    risk          = "LOW";
+    scoreModifier = 0;
+    observations.push("Expense structure appears diversified.");
+    observations.push(
+      `Largest single expense represents ${largestExpensePct.toFixed(1)}% of total outflows — within acceptable concentration limits.`
+    );
+  }
+
+  return {
+    outflowCount,
+    largestExpense:    Math.round(largestExpense    * 100) / 100,
+    largestExpensePct: Math.round(largestExpensePct * 10)  / 10,
+    top3Expense:       Math.round(top3Amount        * 100) / 100,
+    top3Pct:           Math.round(top3Pct           * 10)  / 10,
+    risk,
+    scoreModifier,
+    observations,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Main scoring function
 // ---------------------------------------------------------------------------
 
@@ -921,7 +1009,10 @@ export function computeScorecard(
   // ── 5c. Volatility Intelligence ─────────────────────────────────────────
   const volatilityIntelligence = computeVolatilityIntelligence(rows);
 
-  // ── 6. Total score (base + trend + margin + concentration + volatility) ─
+  // ── 5d. Expense Dependency Intelligence ─────────────────────────────────
+  const expenseDependency = computeExpenseDependency(rows, totalOutflow);
+
+  // ── 6. Total score (base + trend + margin + concentration + volatility + expense) ─
   const baseScore   = cfWeighted + actWeighted + conWeighted;
   const totalScore  = Math.round(
     Math.min(100, Math.max(0,
@@ -930,6 +1021,7 @@ export function computeScorecard(
       + marginHealth.scoreModifier
       + revenueConcentration.scoreModifier
       + volatilityIntelligence.scoreModifier
+      + expenseDependency.scoreModifier
     ))
   );
 
@@ -1068,6 +1160,27 @@ export function computeScorecard(
     });
   }
 
+  // Expense Dependency rules
+  if (expenseDependency.risk === "HIGH") {
+    triggeredRules.push({
+      rule:        "EXPENSE_HIGH",
+      effect:      "score-penalty",
+      description: `High expense dependency detected — business appears highly dependent on a small number of expenses (-${EXPENSE_HIGH_PENALTY} pts). ${expenseDependency.observations[1] ?? ""}`,
+    });
+  } else if (expenseDependency.risk === "MODERATE") {
+    triggeredRules.push({
+      rule:        "EXPENSE_MODERATE",
+      effect:      "score-penalty",
+      description: `Moderate expense dependency detected — some reliance on a small number of expenses (-${EXPENSE_MODERATE_PENALTY} pts). ${expenseDependency.observations[1] ?? ""}`,
+    });
+  } else if (expenseDependency.outflowCount > 0) {
+    triggeredRules.push({
+      rule:        "EXPENSE_LOW",
+      effect:      "passed",
+      description: `Expense structure is diversified — no significant single-expense dependency detected. Largest expense: ${expenseDependency.largestExpensePct.toFixed(1)}% of total outflows.`,
+    });
+  }
+
   // Volatility Intelligence rules
   if (!volatilityIntelligence.isInsufficientHistory) {
     if (volatilityIntelligence.classification === "HIGH") {
@@ -1191,6 +1304,7 @@ export function computeScorecard(
       marginHealth,
       revenueConcentration,
       volatilityIntelligence,
+      expenseDependency,
       triggeredRules,
       configSnapshot,
     },

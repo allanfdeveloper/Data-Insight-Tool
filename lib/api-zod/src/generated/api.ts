@@ -450,6 +450,42 @@ export const GetAssessmentResponse = zod
             .describe(
               "Cashflow Volatility Intelligence — measures stability and predictability of monthly inflows",
             ),
+          expenseDependency: zod
+            .object({
+              outflowCount: zod
+                .number()
+                .describe("Total number of outflow transactions analysed"),
+              largestExpense: zod
+                .number()
+                .describe("Amount of the single largest outflow transaction"),
+              largestExpensePct: zod
+                .number()
+                .describe("Largest outflow as a percentage of total outflows"),
+              top3Expense: zod
+                .number()
+                .describe(
+                  "Combined amount of the top 3 largest outflow transactions",
+                ),
+              top3Pct: zod
+                .number()
+                .describe("Top 3 outflows as a percentage of total outflows"),
+              risk: zod
+                .enum(["LOW", "MODERATE", "HIGH"])
+                .describe(
+                  "Expense dependency risk based on concentration of outflow transactions",
+                ),
+              scoreModifier: zod
+                .number()
+                .describe("Score adjustment applied (0, −2, or −4)"),
+              observations: zod
+                .array(zod.string())
+                .describe(
+                  "Human-readable explanations of the expense dependency finding",
+                ),
+            })
+            .describe(
+              "Expense Dependency Intelligence — measures concentration of outflows and identifies dependency risk",
+            ),
           configSnapshot: zod
             .object({
               passThreshold: zod.number(),

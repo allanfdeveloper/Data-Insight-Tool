@@ -22,6 +22,8 @@ export * from "./cashflowStrengthFactor";
 export * from "./concentrationRisk";
 export * from "./consistencyFactor";
 export * from "./errorResponse";
+export * from "./expenseDependency";
+export * from "./expenseDependencyRisk";
 export * from "./healthStatus";
 export * from "./marginClassification";
 export * from "./marginHealth";

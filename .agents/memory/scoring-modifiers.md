@@ -28,6 +28,12 @@ Final score is clamped to [0, 100].
 - HIGH (CV > 50%): -5
 - Eligibility: requires ≥3 months with inflow activity; isInsufficientHistory=true → no penalty
 
+## Expense Dependency (expenseDependency.scoreModifier)
+- LOW (largest expense < 25% of total outflows): 0
+- MODERATE (largest expense 25–40%): -2
+- HIGH (largest expense > 40%): -4
+- Computed from individual outflow transaction amounts sorted descending; totalOutflow=0 → LOW with no penalty
+
 **Why:** Volatility and trend modifiers are independent — trend uses net cashflow CV; volatility uses inflow-only CV. Not double-counting.
 
 **How to apply:** When adding a new modifier, wire it into the totalScore calculation in computeScorecard() step 6, add a triggered rule, include it in the Scorecard return object, backfill it in assessments.ts, and add it to the OpenAPI spec.

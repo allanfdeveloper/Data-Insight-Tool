@@ -207,6 +207,39 @@ export interface RevenueConcentration {
 }
 
 /**
+ * Expense dependency risk based on concentration of outflow transactions
+ */
+export type ExpenseDependencyRisk =
+  (typeof ExpenseDependencyRisk)[keyof typeof ExpenseDependencyRisk];
+
+export const ExpenseDependencyRisk = {
+  LOW: "LOW",
+  MODERATE: "MODERATE",
+  HIGH: "HIGH",
+} as const;
+
+/**
+ * Expense Dependency Intelligence — measures concentration of outflows and identifies dependency risk
+ */
+export interface ExpenseDependency {
+  /** Total number of outflow transactions analysed */
+  outflowCount: number;
+  /** Amount of the single largest outflow transaction */
+  largestExpense: number;
+  /** Largest outflow as a percentage of total outflows */
+  largestExpensePct: number;
+  /** Combined amount of the top 3 largest outflow transactions */
+  top3Expense: number;
+  /** Top 3 outflows as a percentage of total outflows */
+  top3Pct: number;
+  risk: ExpenseDependencyRisk;
+  /** Score adjustment applied (0, −2, or −4) */
+  scoreModifier: number;
+  /** Human-readable explanations of the expense dependency finding */
+  observations: string[];
+}
+
+/**
  * Operational margin strength classification based on net cashflow as a percentage of total inflows. Strong = above 30%. Moderate = 15%–30%. Thin = below 15%.
 
  */
@@ -411,6 +444,7 @@ export interface Scorecard {
   marginHealth: MarginHealth;
   revenueConcentration: RevenueConcentration;
   volatilityIntelligence: VolatilityIntelligence;
+  expenseDependency: ExpenseDependency;
   /** Configuration values used when this assessment was scored */
   configSnapshot: ScorecardConfigSnapshot;
 }

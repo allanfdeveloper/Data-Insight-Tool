@@ -639,6 +639,50 @@ components:
         - scoreModifier
         - observations
 
+    ExpenseDependencyRisk:
+      type: string
+      enum: [LOW, MODERATE, HIGH]
+      description: Expense dependency risk based on concentration of outflow transactions
+
+    ExpenseDependency:
+      type: object
+      description: Expense Dependency Intelligence — measures concentration of outflows and identifies dependency risk
+      properties:
+        outflowCount:
+          type: integer
+          description: Total number of outflow transactions analysed
+        largestExpense:
+          type: number
+          description: Amount of the single largest outflow transaction
+        largestExpensePct:
+          type: number
+          description: Largest outflow as a percentage of total outflows
+        top3Expense:
+          type: number
+          description: Combined amount of the top 3 largest outflow transactions
+        top3Pct:
+          type: number
+          description: Top 3 outflows as a percentage of total outflows
+        risk:
+          $ref: "#/components/schemas/ExpenseDependencyRisk"
+        scoreModifier:
+          type: number
+          description: Score adjustment applied (0, −2, or −4)
+        observations:
+          type: array
+          items:
+            type: string
+          description: Human-readable explanations of the expense dependency finding
+      required:
+        - outflowCount
+        - largestExpense
+        - largestExpensePct
+        - top3Expense
+        - top3Pct
+        - risk
+        - scoreModifier
+        - observations
+
     MarginClassification:
       type: string
       enum: [Strong, Moderate, Thin]
@@ -861,6 +905,8 @@ components:
           $ref: "#/components/schemas/RevenueConcentration"
         volatilityIntelligence:
           $ref: "#/components/schemas/VolatilityIntelligence"
+        expenseDependency:
+          $ref: "#/components/schemas/ExpenseDependency"
         configSnapshot:
           type: object
           description: Configuration values used when this assessment was scored
@@ -900,6 +946,7 @@ components:
         - marginHealth
         - revenueConcentration
         - volatilityIntelligence
+        - expenseDependency
         - triggeredRules
         - configSnapshot
 

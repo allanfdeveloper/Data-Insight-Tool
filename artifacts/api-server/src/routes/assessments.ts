@@ -73,6 +73,18 @@ function backfillScorecard(sc: unknown, confidence: string): unknown {
       isInsufficientHistory: true,
     };
   }
+  if (!scorecard.expenseDependency) {
+    scorecard.expenseDependency = {
+      outflowCount: 0,
+      largestExpense: 0,
+      largestExpensePct: 0,
+      top3Expense: 0,
+      top3Pct: 0,
+      risk: "LOW",
+      scoreModifier: 0,
+      observations: ["Expense dependency analysis not available for this assessment — re-upload to generate expense data."],
+    };
+  }
   // Migrate old "cap-review" effects on insufficient-data rules to "confidence-warning"
   if (Array.isArray(scorecard.triggeredRules)) {
     scorecard.triggeredRules = (scorecard.triggeredRules as any[]).map((r) => {

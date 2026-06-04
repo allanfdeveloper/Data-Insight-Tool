@@ -83,6 +83,17 @@ interface VolatilityIntelligenceData {
   isInsufficientHistory: boolean;
 }
 
+interface ExpenseDependencyData {
+  outflowCount: number;
+  largestExpense: number;
+  largestExpensePct: number;
+  top3Expense: number;
+  top3Pct: number;
+  risk: "LOW" | "MODERATE" | "HIGH";
+  scoreModifier: number;
+  observations: string[];
+}
+
 interface TriggeredRule {
   rule: string;
   effect: "auto-fail" | "cap-review" | "score-penalty" | "score-bonus" | "passed" | "confidence-warning";
@@ -115,6 +126,7 @@ interface ScorecardData {
   marginHealth?: MarginHealthData;
   revenueConcentration?: RevenueConcentrationData;
   volatilityIntelligence?: VolatilityIntelligenceData;
+  expenseDependency?: ExpenseDependencyData;
   triggeredRules: TriggeredRule[];
   configSnapshot?: {
     passThreshold: number;
@@ -369,6 +381,85 @@ const HIGH_CONCENTRATION_LARGEST_PCT = 40;
 const MOD_CONCENTRATION_LARGEST_PCT  = 25;
 const HIGH_CONCENTRATION_TOP3_PCT    = 80;
 const MOD_CONCENTRATION_TOP3_PCT     = 60;
+const HIGH_EXPENSE_LARGEST_PCT       = 40;
+const MOD_EXPENSE_LARGEST_PCT        = 25;
+
+// ---------- Expense Dependency Section ----------
+
+function ExpenseRiskBadge({ risk }: { risk: "LOW" | "MODERATE" | "HIGH" }) {
+  if (risk === "HIGH")
+    return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 text-sm px-3 py-1"><AlertTriangle className="h-4 w-4 mr-1.5" />HIGH Risk</Badge>;
+  if (risk === "MODERATE")
+    return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 text-sm px-3 py-1"><AlertCircle className="h-4 w-4 mr-1.5" />MODERATE Risk</Badge>;
+  return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100 text-sm px-3 py-1"><CheckCircle2 className="h-4 w-4 mr-1.5" />LOW Risk</Badge>;
+}
+
+function ExpenseDependencySection({ ed }: { ed: ExpenseDependencyData }) {
+  const bgBorder =
+    ed.risk === "LOW"      ? "bg-green-50 border-green-200" :
+    ed.risk === "MODERATE" ? "bg-amber-50 border-amber-200" :
+                              "bg-red-50 border-red-200";
+
+  const modifierColor = ed.scoreModifier < 0 ? "text-orange-700" : "text-slate-500";
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+        <BarChart3 className="h-4 w-4 text-orange-500" />
+        Expense Dependency
+      </h2>
+
+      <div className={`rounded-xl border px-5 py-4 ${bgBorder}`}>
+        {/* Header row */}
+        <div className="flex items-start gap-4 flex-wrap justify-between mb-4">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Dependency Risk</p>
+            <ExpenseRiskBadge risk={ed.risk} />
+          </div>
+          {ed.scoreModifier !== 0 && (
+            <span className={`text-sm font-semibold ${modifierColor} mt-1`}>
+              {ed.scoreModifier} pts applied
+            </span>
+          )}
+        </div>
+
+        {/* Metrics grid */}
+        {ed.outflowCount > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Largest Expense</p>
+              <p className="text-base font-bold text-foreground">{formatCurrency(ed.largestExpense)}</p>
+            </div>
+            <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Largest Expense %</p>
+              <p className={`text-base font-bold ${ed.largestExpensePct > HIGH_EXPENSE_LARGEST_PCT ? "text-red-700" : ed.largestExpensePct >= MOD_EXPENSE_LARGEST_PCT ? "text-amber-700" : "text-green-700"}`}>
+                {ed.largestExpensePct.toFixed(1)}%
+              </p>
+            </div>
+            <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Top 3 Expenses</p>
+              <p className="text-base font-bold text-foreground">{formatCurrency(ed.top3Expense)}</p>
+            </div>
+            <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Top 3 %</p>
+              <p className="text-base font-bold text-foreground">{ed.top3Pct.toFixed(1)}%</p>
+            </div>
+          </div>
+        )}
+
+        {/* Observations */}
+        <ul className="space-y-1">
+          {ed.observations.map((obs, i) => (
+            <li key={i} className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
+              <span className="mt-1.5 h-1 w-1 rounded-full bg-muted-foreground/50 shrink-0" />
+              {obs}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
 
 // ---------- Volatility Intelligence Section ----------
 
@@ -490,6 +581,7 @@ function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
   const mh = sc.marginHealth;
   const ta = sc.trendAnalysis;
   const vi = sc.volatilityIntelligence;
+  const ed = sc.expenseDependency;
 
   const insufficient = !!ta?.isInsufficientHistory;
 
@@ -530,6 +622,13 @@ function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
       detail: `Revenue patterns are stable and predictable (CV: ${vi.cv.toFixed(1)}%).`,
     });
   }
+  // Expense dependency positive signal
+  if (ed && ed.risk === "LOW" && ed.outflowCount > 0) {
+    positiveSignals.push({
+      label:  "Diversified Expense Structure",
+      detail: `Expense structure appears diversified. Largest single expense represents ${ed.largestExpensePct.toFixed(1)}% of total outflows.`,
+    });
+  }
 
   // ── Risk signals ─────────────────────────────────────────────────────
   if (rc && rc.risk !== "LOW" && rc.inflowCount > 0) {
@@ -554,6 +653,18 @@ function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
     riskSignals.push({
       label:  "Moderate Revenue Volatility",
       detail: `Moderate fluctuations in monthly revenue detected (CV: ${vi.cv.toFixed(1)}%).`,
+    });
+  }
+  // Expense dependency risk signals
+  if (ed && ed.risk === "HIGH" && ed.outflowCount > 0) {
+    riskSignals.push({
+      label:  "High Expense Dependency",
+      detail: `Business appears highly dependent on a small number of expenses. Operational disruption risk is elevated. Largest expense: ${ed.largestExpensePct.toFixed(1)}% of total outflows.`,
+    });
+  } else if (ed && ed.risk === "MODERATE" && ed.outflowCount > 0) {
+    riskSignals.push({
+      label:  "Moderate Expense Dependency",
+      detail: `Business shows moderate reliance on a small number of expense categories. Largest expense: ${ed.largestExpensePct.toFixed(1)}% of total outflows.`,
     });
   }
   // Deterioration: only valid when sufficient trend history
@@ -1002,6 +1113,9 @@ export default function AssessmentDetailPage() {
 
           {/* ── Revenue Concentration ────────────────────────────────── */}
           {sc?.revenueConcentration && <ConcentrationSection rc={sc.revenueConcentration} />}
+
+          {/* ── Expense Dependency ───────────────────────────────────── */}
+          {sc?.expenseDependency && <ExpenseDependencySection ed={sc.expenseDependency} />}
 
           {/* ── Cashflow Volatility ──────────────────────────────────── */}
           {sc?.volatilityIntelligence && <VolatilitySection vi={sc.volatilityIntelligence} />}
