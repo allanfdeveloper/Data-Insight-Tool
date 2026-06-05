@@ -6,7 +6,7 @@ import {
   TrendingUp, TrendingDown, Hash, Calendar, FileSpreadsheet,
   Activity, BarChart3, RefreshCw, AlertTriangle, ShieldX,
   ShieldCheck, ShieldAlert, Info, ArrowUpRight, ArrowDownRight,
-  Minus, Zap, Shield, PieChart, Eye,
+  Minus, Zap, Shield, PieChart, Eye, ScrollText,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -641,6 +641,294 @@ function GovernanceOverridesSection({ gr }: { gr: GovernanceResultData }) {
   );
 }
 
+// ---------- Credit Narrative Generator ----------
+
+interface CreditNarrative {
+  executiveSummary: string[];
+  financialStrength: string;
+  revenueQuality: string;
+  expenseStructure: string;
+  stability: string;
+  trend: string;
+  governanceCommentary: string[];
+  finalRecommendation: string;
+}
+
+function generateCreditNarrative(
+  sc: ScorecardData,
+  status: "PASS" | "REVIEW" | "FAIL",
+): CreditNarrative {
+  const margin  = sc.marginHealth;
+  const rc      = sc.revenueConcentration;
+  const ed      = sc.expenseDependency;
+  const vi      = sc.volatilityIntelligence;
+  const ta      = sc.trendAnalysis;
+  const gov     = sc.governanceResult;
+  const cf      = sc.cashflowStrength;
+  const cons    = sc.consistency;
+
+  const netRatioPct  = (cf.netRatio * 100).toFixed(1);
+  const marginPct    = margin ? (margin.marginRatio * 100).toFixed(1) : null;
+  const passThresh   = sc.configSnapshot?.passThreshold ?? 70;
+
+  // ── Section: Financial Strength ──────────────────────────────────────────
+  let financialStrength: string;
+  const mRatio = margin?.marginRatio ?? cf.netRatio;
+  if (mRatio >= 0.5) {
+    financialStrength = `Financial performance is strong. The business retains a substantial proportion of revenue after expenses, supporting operational resilience.${marginPct ? ` A net margin of ${marginPct}% indicates healthy cash generation relative to total inflows.` : ` A net cashflow ratio of ${netRatioPct}% demonstrates robust cash generation.`}`;
+  } else if (mRatio >= 0.25) {
+    financialStrength = `Financial performance is satisfactory with positive operating surplus.${marginPct ? ` A net margin of ${marginPct}% reflects adequate cash generation, though limited headroom may reduce flexibility during periods of stress.` : ` A net cashflow ratio of ${netRatioPct}% reflects adequate but moderate cash generation.`}`;
+  } else {
+    financialStrength = `Financial performance is constrained and may reduce flexibility during periods of stress.${marginPct ? ` A net margin of ${marginPct}% indicates limited surplus relative to total inflows, which may affect debt serviceability.` : ` A net cashflow ratio of ${netRatioPct}% indicates constrained margins.`}`;
+  }
+
+  // ── Section: Revenue Quality ─────────────────────────────────────────────
+  let revenueQuality: string;
+  if (!rc) {
+    revenueQuality = "Revenue concentration analysis is not available for this assessment.";
+  } else if (rc.risk === "LOW") {
+    revenueQuality = `Revenue appears reasonably diversified. Analysis of inflow sources indicates no material concentration risk, with the largest single inflow representing ${rc.largestInflowPct.toFixed(1)}% of total revenue across ${rc.inflowCount} distinct sources.`;
+  } else if (rc.risk === "MODERATE") {
+    revenueQuality = `Revenue concentration risk is present and should be monitored. The largest single inflow source represents ${rc.largestInflowPct.toFixed(1)}% of total revenue, which may expose the business to client or counterparty dependency.`;
+  } else {
+    revenueQuality = `Revenue concentration risk is elevated due to dependency on a limited number of inflows. The largest single source represents ${rc.largestInflowPct.toFixed(1)}% of total revenue, creating material exposure to revenue disruption should that source diminish or cease.`;
+  }
+
+  // ── Section: Expense Structure ───────────────────────────────────────────
+  let expenseStructure: string;
+  if (!ed) {
+    expenseStructure = "Expense structure analysis is not available for this assessment.";
+  } else if (ed.risk === "LOW") {
+    expenseStructure = `Expense structure appears diversified. No single expense category represents a disproportionate share of total outflows, with the largest item at ${ed.largestExpensePct.toFixed(1)}% of expenditure across ${ed.outflowCount} distinct expense categories.`;
+  } else if (ed.risk === "MODERATE") {
+    expenseStructure = `Moderate expense concentration exists. The largest expense category accounts for ${ed.largestExpensePct.toFixed(1)}% of total outflows, indicating some dependency on a specific supplier or cost category that warrants monitoring.`;
+  } else {
+    expenseStructure = `Expense dependency risk is elevated due to reliance on a small number of suppliers or cost categories. The largest single expense represents ${ed.largestExpensePct.toFixed(1)}% of total outflows, which may expose the business to cost volatility or supply disruption.`;
+  }
+
+  // ── Section: Stability ───────────────────────────────────────────────────
+  let stability: string;
+  if (!vi || vi.isInsufficientHistory) {
+    stability = "Cashflow volatility analysis could not be completed due to insufficient transaction history.";
+  } else if (vi.classification === "LOW") {
+    stability = `Revenue patterns are stable and predictable. Cashflow volatility is low (CV: ${vi.cv.toFixed(1)}%), supporting consistent and reliable debt serviceability assessment.`;
+  } else if (vi.classification === "MODERATE") {
+    stability = `Some fluctuations are present but remain manageable. Cashflow volatility is moderate (CV: ${vi.cv.toFixed(1)}%), which does not preclude lending but warrants ongoing monitoring of revenue performance.`;
+  } else {
+    stability = `Revenue patterns are highly unpredictable and may affect future repayment capacity. Cashflow volatility is elevated (CV: ${vi.cv.toFixed(1)}%), indicating significant month-to-month variation in revenue that creates uncertainty for debt servicing.`;
+  }
+
+  // ── Section: Trend ───────────────────────────────────────────────────────
+  let trend: string;
+  if (!ta || ta.isInsufficientHistory) {
+    trend = "Trend analysis could not be completed due to insufficient historical data.";
+  } else if (ta.classification === "POSITIVE") {
+    trend = `Business performance is improving. ${ta.explanations[0] ?? "Revenue and cashflow indicators show a positive trajectory over the assessment period, suggesting strengthening financial capacity."}`;
+  } else if (ta.classification === "STABLE") {
+    trend = `No material deterioration or improvement detected. ${ta.explanations[0] ?? "Revenue and cashflow metrics have remained broadly consistent over the assessment period."}`;
+  } else {
+    trend = `Deterioration detected in revenue, profitability, or net cashflow trends. ${ta.explanations[0] ?? "Revenue and cashflow indicators show a declining trajectory over the assessment period, which may affect forward-looking repayment capacity."}`;
+  }
+
+  // ── Section: Governance Commentary ──────────────────────────────────────
+  const governanceCommentary: string[] = gov?.overrides.map(ov => ov.explanation) ?? [];
+
+  // ── Section: Executive Summary ───────────────────────────────────────────
+  const execParas: string[] = [];
+
+  const aboveThreshold  = sc.totalScore >= passThresh;
+  const netPositive     = cf.netCashflow >= 0;
+  const netPosLabel     = netPositive ? "positive net cash position" : "negative net cash position";
+
+  execParas.push(
+    `This credit assessment has been completed with an overall score of ${sc.totalScore} out of ${sc.maxScore}` +
+    (aboveThreshold ? "" : `, which falls below the minimum pass threshold of ${passThresh} points`) +
+    `. The business maintains a ${netPosLabel}` +
+    (margin
+      ? `, with a net margin of ${marginPct}%, ` +
+        (margin.marginRatio >= 0.5 ? "reflecting strong operational efficiency and robust cash retention."
+         : margin.marginRatio >= 0.25 ? "reflecting satisfactory but moderate operational efficiency."
+         : "indicating constrained financial margins that may limit debt serviceability.")
+      : `, with a net cashflow ratio of ${netRatioPct}% of total inflows.`)
+  );
+
+  const revClause = !rc
+    ? "revenue concentration data is unavailable"
+    : rc.risk === "LOW"
+      ? `revenue inflows appear well diversified, with the largest source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts`
+      : rc.risk === "MODERATE"
+        ? `revenue concentration is moderate, with the largest inflow source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts`
+        : `revenue concentration is high, with the dominant inflow source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts`;
+
+  const expClause = !ed
+    ? "Expense dependency data is unavailable."
+    : ed.risk === "LOW"
+      ? `The expense structure is well-distributed, with the largest outflow at ${ed.largestExpensePct.toFixed(1)}% of total expenditure.`
+      : ed.risk === "MODERATE"
+        ? `The expense base shows moderate concentration, with the largest cost item at ${ed.largestExpensePct.toFixed(1)}% of total expenditure.`
+        : `The expense base is concentrated, with the largest cost item representing ${ed.largestExpensePct.toFixed(1)}% of total expenditure, presenting supply chain or cost-side risk.`;
+
+  execParas.push(`From a revenue quality standpoint, ${revClause}. ${expClause}`);
+
+  const viClause = !vi || vi.isInsufficientHistory
+    ? "Cashflow volatility could not be assessed due to insufficient history"
+    : vi.classification === "LOW"
+      ? `cashflow volatility is low (CV: ${vi.cv.toFixed(1)}%), supporting predictable future cash generation`
+      : vi.classification === "MODERATE"
+        ? `cashflow volatility is moderate (CV: ${vi.cv.toFixed(1)}%), with manageable fluctuations in monthly receipts`
+        : `cashflow volatility is high (CV: ${vi.cv.toFixed(1)}%), raising concerns about repayment predictability`;
+
+  const trendClause = !ta || ta.isInsufficientHistory ? ""
+    : ta.classification === "POSITIVE" ? " Performance trends are positive, with improving cashflow indicators over the assessment window."
+    : ta.classification === "STABLE"   ? " No material deterioration or improvement has been detected over the assessment window."
+    : " A deteriorating trend has been identified over the assessment window, which may affect forward-looking repayment capacity.";
+
+  execParas.push(
+    `In terms of revenue stability, ${viClause}.${trendClause} Income consistency is ${cons.label.toLowerCase()}, as measured across ${cons.monthCount} months of transaction data.`
+  );
+
+  if (gov?.overridesTriggered) {
+    const ruleNames = gov.overrides.map(o => o.rule).join("; ");
+    execParas.push(
+      `The automated scoring engine assigned a provisional decision of ${gov.provisionalDecision}. However, the Governance Rules Engine identified ${gov.overrides.length} override condition${gov.overrides.length > 1 ? "s" : ""} (${ruleNames}), resulting in a final decision of ${gov.finalDecision}. Manual underwriter review is required before any lending or funding commitment is made.`
+    );
+  } else {
+    execParas.push(
+      status === "PASS"
+        ? "The business satisfies the automated assessment requirements. No governance overrides were triggered. The application may proceed to credit approval subject to standard due diligence."
+        : status === "REVIEW"
+          ? "The assessment outcome requires manual review before a lending or funding decision can be made. The score or data confidence did not meet the threshold for automatic approval."
+          : "The business does not satisfy the minimum automated assessment requirements. A lending or funding decision should not proceed without further financial evidence and manual underwriter assessment."
+    );
+  }
+
+  // ── Section: Final Recommendation ────────────────────────────────────────
+  let finalRecommendation: string;
+  if (status === "PASS") {
+    finalRecommendation = "The business satisfies automated assessment requirements. Subject to standard due diligence, the application may proceed to credit approval.";
+  } else if (status === "REVIEW") {
+    finalRecommendation = gov?.overridesTriggered
+      ? `The business requires manual review before a lending or funding decision is made. Governance overrides were applied due to: ${gov.overrides.map(o => o.rule).join("; ")}. An underwriter should review the flagged conditions and any additional supporting documentation before proceeding.`
+      : "The business requires manual review before a lending or funding decision is made. The assessment score or data quality did not meet the threshold for automatic approval.";
+  } else {
+    finalRecommendation = "The business does not currently satisfy minimum assessment requirements. A lending or funding decision should not proceed without further financial evidence and underwriter assessment.";
+  }
+
+  return {
+    executiveSummary: execParas,
+    financialStrength,
+    revenueQuality,
+    expenseStructure,
+    stability,
+    trend,
+    governanceCommentary,
+    finalRecommendation,
+  };
+}
+
+function NarrativeBlock({ title, text, accent }: { title: string; text: string; accent?: string }) {
+  return (
+    <div className={`rounded-lg border p-4 ${accent ?? "border-border bg-muted/20"}`}>
+      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{title}</p>
+      <p className="text-xs text-foreground leading-relaxed">{text}</p>
+    </div>
+  );
+}
+
+function CreditNarrativeSection({ sc, status }: { sc: ScorecardData; status: "PASS" | "REVIEW" | "FAIL" }) {
+  const narrative = generateCreditNarrative(sc, status);
+  const gov = sc.governanceResult;
+  const isGovOverride = !!(gov?.overridesTriggered);
+
+  const recBorderClass = status === "PASS"
+    ? "border-green-200 bg-green-50"
+    : status === "REVIEW"
+      ? "border-amber-200 bg-amber-50"
+      : "border-red-200 bg-red-50";
+
+  const recTextClass = status === "PASS" ? "text-green-800"
+    : status === "REVIEW" ? "text-amber-800"
+    : "text-red-800";
+
+  return (
+    <div className="bg-card border border-card-border rounded-xl mb-6">
+      <div className="px-5 py-4 border-b border-card-border flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <ScrollText className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">Credit Narrative</h2>
+        </div>
+        <Badge variant="outline" className="text-[10px] text-muted-foreground font-normal">
+          Auto-Generated
+        </Badge>
+      </div>
+
+      <div className="px-5 py-5 space-y-6">
+        {/* Executive Summary */}
+        <div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Executive Summary</p>
+          <div className="space-y-3">
+            {narrative.executiveSummary.map((para, i) => (
+              <p key={i} className="text-sm text-foreground leading-relaxed">{para}</p>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-card-border" />
+
+        {/* Commentary grid */}
+        <div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Detailed Commentary</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <NarrativeBlock title="Financial Strength" text={narrative.financialStrength} />
+            <NarrativeBlock title="Revenue Quality" text={narrative.revenueQuality} />
+            <NarrativeBlock title="Expense Structure" text={narrative.expenseStructure} />
+            <NarrativeBlock title="Stability &amp; Volatility" text={narrative.stability} />
+            <NarrativeBlock
+              title="Trend Analysis"
+              text={narrative.trend}
+              accent={
+                sc.trendAnalysis?.classification === "POSITIVE" ? "border-green-200 bg-green-50"
+                : sc.trendAnalysis?.classification === "NEGATIVE" ? "border-red-200 bg-red-50"
+                : undefined
+              }
+            />
+          </div>
+        </div>
+
+        {/* Governance Commentary */}
+        {isGovOverride && narrative.governanceCommentary.length > 0 && (
+          <>
+            <div className="border-t border-card-border" />
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <ShieldAlert className="h-3 w-3 text-amber-600" />
+                Governance Commentary
+              </p>
+              <div className="space-y-3">
+                {narrative.governanceCommentary.map((para, i) => (
+                  <div key={i} className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                    <p className="text-xs text-amber-900 leading-relaxed">{para}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="border-t border-card-border" />
+
+        {/* Final Recommendation */}
+        <div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Final Recommendation</p>
+          <div className={`rounded-lg border px-4 py-3 ${recBorderClass}`}>
+            <p className={`text-sm font-medium leading-relaxed ${recTextClass}`}>{narrative.finalRecommendation}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Assessment Diagnostics ----------
 
 function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
@@ -1165,6 +1453,9 @@ export default function AssessmentDetailPage() {
 
           {/* ── Governance Overrides ─────────────────────────────────── */}
           {sc?.governanceResult && <GovernanceOverridesSection gr={sc.governanceResult} />}
+
+          {/* ── Credit Narrative ─────────────────────────────────────── */}
+          {sc && <CreditNarrativeSection sc={sc} status={assessment.status as "PASS" | "REVIEW" | "FAIL"} />}
 
           {/* ── Key metrics ──────────────────────────────────────────── */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
