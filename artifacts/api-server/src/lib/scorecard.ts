@@ -260,6 +260,20 @@ export interface ExpenseDependency {
   observations: string[];
 }
 
+export interface GovernanceOverride {
+  rule:             string;
+  triggerCondition: string;
+  decisionImpact:   string;
+  explanation:      string;
+}
+
+export interface GovernanceResult {
+  overridesTriggered:  boolean;
+  overrides:           GovernanceOverride[];
+  provisionalDecision: "PASS" | "REVIEW" | "FAIL";
+  finalDecision:       "PASS" | "REVIEW" | "FAIL";
+}
+
 export interface TriggeredRule {
   rule: string;
   effect: "auto-fail" | "cap-review" | "score-penalty" | "score-bonus" | "passed" | "confidence-warning";
@@ -330,6 +344,7 @@ export interface Scorecard {
   revenueConcentration: RevenueConcentration;
   volatilityIntelligence: VolatilityIntelligence;
   expenseDependency: ExpenseDependency;
+  governanceResult: GovernanceResult;
   triggeredRules: TriggeredRule[];
   configSnapshot: ConfigSnapshot;
 }
@@ -864,6 +879,94 @@ function computeExpenseDependency(rows: TransactionRow[], totalOutflow: number):
 }
 
 // ---------------------------------------------------------------------------
+// Governance Rules Engine
+// ---------------------------------------------------------------------------
+
+const EXTREME_REVENUE_CONCENTRATION_THRESHOLD = 70;  // largestInflowPct >= 70% → extreme
+const EXTREME_EXPENSE_DEPENDENCY_THRESHOLD     = 60;  // largestExpensePct >= 60% → extreme
+const SEVERE_VOLATILITY_CV_THRESHOLD           = 90;  // CV >= 90% → severe
+
+function computeGovernance(
+  data: {
+    revenueConcentration:   RevenueConcentration;
+    expenseDependency:      ExpenseDependency;
+    volatilityIntelligence: VolatilityIntelligence;
+    consistency:            ConsistencyFactor;
+    confidence:             AssessmentConfidence;
+  },
+  highlyIrregular: boolean,
+  provisionalDecision: "PASS" | "REVIEW" | "FAIL"
+): GovernanceResult {
+  const overrides: GovernanceOverride[] = [];
+
+  // Rule 1 — Extreme Revenue Concentration
+  if (
+    data.revenueConcentration.risk === "HIGH" &&
+    data.revenueConcentration.largestInflowPct >= EXTREME_REVENUE_CONCENTRATION_THRESHOLD
+  ) {
+    overrides.push({
+      rule:             "Extreme Revenue Concentration",
+      triggerCondition: `Revenue Concentration Risk = HIGH and Largest Inflow ≥ ${EXTREME_REVENUE_CONCENTRATION_THRESHOLD}% (actual: ${data.revenueConcentration.largestInflowPct.toFixed(1)}%)`,
+      decisionImpact:   "PASS not allowed — maximum result capped to REVIEW",
+      explanation:      `Largest inflow represents ${data.revenueConcentration.largestInflowPct.toFixed(1)}% of total revenue. Business is highly dependent on a single revenue source. Result capped to REVIEW pending manual assessment.`,
+    });
+  }
+
+  // Rule 2 — Extreme Expense Dependency
+  if (
+    data.expenseDependency.risk === "HIGH" &&
+    data.expenseDependency.largestExpensePct >= EXTREME_EXPENSE_DEPENDENCY_THRESHOLD
+  ) {
+    overrides.push({
+      rule:             "Extreme Expense Dependency",
+      triggerCondition: `Expense Dependency Risk = HIGH and Largest Expense ≥ ${EXTREME_EXPENSE_DEPENDENCY_THRESHOLD}% (actual: ${data.expenseDependency.largestExpensePct.toFixed(1)}%)`,
+      decisionImpact:   "PASS not allowed — maximum result capped to REVIEW",
+      explanation:      `Largest expense represents ${data.expenseDependency.largestExpensePct.toFixed(1)}% of total outflows. Business is highly dependent on a single supplier, expense category, or operational cost. Result capped to REVIEW pending manual assessment.`,
+    });
+  }
+
+  // Rule 3 — Severe Revenue Volatility
+  if (
+    !data.volatilityIntelligence.isInsufficientHistory &&
+    data.volatilityIntelligence.classification === "HIGH" &&
+    data.volatilityIntelligence.cv >= SEVERE_VOLATILITY_CV_THRESHOLD
+  ) {
+    overrides.push({
+      rule:             "Severe Revenue Volatility",
+      triggerCondition: `Volatility Classification = HIGH and Coefficient of Variation ≥ ${SEVERE_VOLATILITY_CV_THRESHOLD}% (actual: ${data.volatilityIntelligence.cv.toFixed(1)}%)`,
+      decisionImpact:   "PASS not allowed — maximum result capped to REVIEW",
+      explanation:      `Revenue volatility exceeds acceptable lending thresholds (CV: ${data.volatilityIntelligence.cv.toFixed(1)}%). Result capped to REVIEW pending manual assessment.`,
+    });
+  }
+
+  // Rule 4 — Severe Income Irregularity
+  if (data.consistency.normalizedScore === 0 || highlyIrregular) {
+    overrides.push({
+      rule:             "Severe Income Irregularity",
+      triggerCondition: `Income Consistency Score = 0 or Highly Irregular Income Pattern detected`,
+      decisionImpact:   "PASS not allowed — maximum result capped to REVIEW",
+      explanation:      `Income patterns are too irregular for automatic approval. Result capped to REVIEW pending manual assessment.`,
+    });
+  }
+
+  // Rule 5 — Low Confidence Protection
+  if (data.confidence === "LOW") {
+    overrides.push({
+      rule:             "Low Assessment Confidence",
+      triggerCondition: `Assessment Confidence = LOW`,
+      decisionImpact:   "PASS not allowed — maximum result capped to REVIEW",
+      explanation:      `Insufficient data confidence for automatic approval. Result capped to REVIEW pending manual assessment.`,
+    });
+  }
+
+  const overridesTriggered = overrides.length > 0;
+  const finalDecision: "PASS" | "REVIEW" | "FAIL" =
+    overridesTriggered && provisionalDecision === "PASS" ? "REVIEW" : provisionalDecision;
+
+  return { overridesTriggered, overrides, provisionalDecision, finalDecision };
+}
+
+// ---------------------------------------------------------------------------
 // Main scoring function
 // ---------------------------------------------------------------------------
 
@@ -1280,6 +1383,17 @@ export function computeScorecard(
     statusReason = `Score ${totalScore}/100 is below the review threshold (${reviewThreshold}).${resilienceNote}${trendNote}${confidenceNote}`;
   }
 
+  // ── 10. Governance Rules Engine ─────────────────────────────────────────
+  const governanceResult = computeGovernance(
+    { revenueConcentration, expenseDependency, volatilityIntelligence, consistency, confidence },
+    highlyIrregular,
+    status
+  );
+  if (governanceResult.finalDecision !== status) {
+    status       = governanceResult.finalDecision;
+    statusReason = `Governance override applied — ${governanceResult.overrides.map(o => o.rule).join("; ")}. Original decision: ${governanceResult.provisionalDecision}. Score: ${totalScore}/100.`;
+  }
+
   const configSnapshot: ConfigSnapshot = {
     passThreshold,
     reviewThreshold,
@@ -1305,6 +1419,7 @@ export function computeScorecard(
       revenueConcentration,
       volatilityIntelligence,
       expenseDependency,
+      governanceResult,
       triggeredRules,
       configSnapshot,
     },

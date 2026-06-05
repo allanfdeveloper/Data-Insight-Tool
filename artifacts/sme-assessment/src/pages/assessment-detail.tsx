@@ -94,6 +94,20 @@ interface ExpenseDependencyData {
   observations: string[];
 }
 
+interface GovernanceOverrideData {
+  rule:             string;
+  triggerCondition: string;
+  decisionImpact:   string;
+  explanation:      string;
+}
+
+interface GovernanceResultData {
+  overridesTriggered:  boolean;
+  overrides:           GovernanceOverrideData[];
+  provisionalDecision: "PASS" | "REVIEW" | "FAIL";
+  finalDecision:       "PASS" | "REVIEW" | "FAIL";
+}
+
 interface TriggeredRule {
   rule: string;
   effect: "auto-fail" | "cap-review" | "score-penalty" | "score-bonus" | "passed" | "confidence-warning";
@@ -127,6 +141,7 @@ interface ScorecardData {
   revenueConcentration?: RevenueConcentrationData;
   volatilityIntelligence?: VolatilityIntelligenceData;
   expenseDependency?: ExpenseDependencyData;
+  governanceResult?: GovernanceResultData;
   triggeredRules: TriggeredRule[];
   configSnapshot?: {
     passThreshold: number;
@@ -569,6 +584,58 @@ function VolatilitySection({ vi }: { vi: VolatilityIntelligenceData }) {
             No volatility penalty is applied when inflow history is insufficient.
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Governance Overrides Section ----------
+
+function GovernanceOverridesSection({ gr }: { gr: GovernanceResultData }) {
+  if (!gr.overridesTriggered || gr.overrides.length === 0) {
+    return (
+      <div className="rounded-xl border border-green-200 bg-green-50 px-5 py-3.5 flex items-center gap-3 mb-4">
+        <ShieldCheck className="h-4 w-4 text-green-600 shrink-0" />
+        <div>
+          <p className="text-xs font-semibold text-green-800 uppercase tracking-wide">Governance</p>
+          <p className="text-xs text-green-700 mt-0.5">No governance overrides applied.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4">
+      <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+        <ShieldAlert className="h-4 w-4 text-amber-600" />
+        Governance Overrides
+      </h2>
+      <div className="space-y-3">
+        {gr.overrides.map((ov, i) => (
+          <div key={i} className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
+            <div className="flex items-start gap-3 mb-3">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-0.5">Governance Override Applied</p>
+                <p className="text-sm font-bold text-foreground">{ov.rule}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 ml-7">
+              <div>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Trigger Condition</p>
+                <p className="text-xs text-foreground leading-relaxed">{ov.triggerCondition}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Decision Impact</p>
+                <p className="text-xs font-semibold text-amber-700">{ov.decisionImpact}</p>
+              </div>
+            </div>
+            <div className="ml-7 mt-3">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Explanation</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{ov.explanation}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1018,28 +1085,53 @@ export default function AssessmentDetailPage() {
       {assessment && (
         <>
           {/* ── Status banner ───────────────────────────────────────── */}
-          <div
-            className={`rounded-xl p-5 mb-4 border ${
-              assessment.status === "PASS" ? "bg-green-50 border-green-200"
-              : assessment.status === "REVIEW" ? "bg-amber-50 border-amber-200"
-              : "bg-red-50 border-red-200"
-            }`}
-            data-testid="assessment-status"
-          >
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Assessment Result</p>
-                <StatusBadge status={assessment.status} />
-              </div>
-              {sc && (
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground mb-1">Overall Score</p>
-                  <p className="text-2xl font-bold text-foreground">{sc.totalScore}<span className="text-sm font-normal text-muted-foreground">/{sc.maxScore}</span></p>
+          {(() => {
+            const gov = sc?.governanceResult;
+            const isGovOverride = !!(gov?.overridesTriggered && gov.finalDecision !== gov.provisionalDecision);
+            return (
+              <div
+                className={`rounded-xl p-5 mb-4 border ${
+                  assessment.status === "PASS" ? "bg-green-50 border-green-200"
+                  : assessment.status === "REVIEW" ? "bg-amber-50 border-amber-200"
+                  : "bg-red-50 border-red-200"
+                }`}
+                data-testid="assessment-status"
+              >
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    {isGovOverride ? (
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Final Result</p>
+                          <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 text-[10px] px-1.5 py-0 h-4">
+                            <ShieldAlert className="h-2.5 w-2.5 mr-0.5" />Gov Override
+                          </Badge>
+                        </div>
+                        <StatusBadge status={assessment.status} />
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Assessment Result</p>
+                        <StatusBadge status={assessment.status} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    {sc && (
+                      <>
+                        <p className="text-xs text-muted-foreground mb-1">Overall Score</p>
+                        <p className="text-2xl font-bold text-foreground">{sc.totalScore}<span className="text-sm font-normal text-muted-foreground">/{sc.maxScore}</span></p>
+                        {isGovOverride && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">Score-based: <span className="font-semibold">{gov?.provisionalDecision}</span></p>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
-            {sc && <p className="text-xs text-muted-foreground mt-3 leading-relaxed">{sc.statusReason}</p>}
-          </div>
+                {sc && <p className="text-xs text-muted-foreground mt-3 leading-relaxed">{sc.statusReason}</p>}
+              </div>
+            );
+          })()}
 
           {/* ── Confidence banner ────────────────────────────────────── */}
           {confidence && (
@@ -1070,6 +1162,9 @@ export default function AssessmentDetailPage() {
               </div>
             </div>
           )}
+
+          {/* ── Governance Overrides ─────────────────────────────────── */}
+          {sc?.governanceResult && <GovernanceOverridesSection gr={sc.governanceResult} />}
 
           {/* ── Key metrics ──────────────────────────────────────────── */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

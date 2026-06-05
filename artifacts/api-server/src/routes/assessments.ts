@@ -15,7 +15,7 @@ import {
 import { logger } from "../lib/logger";
 
 /** Back-fill legacy scorecard JSONB that predates the confidence layer. */
-function backfillScorecard(sc: unknown, confidence: string): unknown {
+function backfillScorecard(sc: unknown, confidence: string, status?: "PASS" | "REVIEW" | "FAIL"): unknown {
   if (!sc || typeof sc !== "object") return sc;
   const scorecard = sc as Record<string, unknown>;
   if (!scorecard.confidence) scorecard.confidence = confidence;
@@ -83,6 +83,15 @@ function backfillScorecard(sc: unknown, confidence: string): unknown {
       risk: "LOW",
       scoreModifier: 0,
       observations: ["Expense dependency analysis not available for this assessment — re-upload to generate expense data."],
+    };
+  }
+  if (!scorecard.governanceResult) {
+    const dec = status ?? "REVIEW";
+    scorecard.governanceResult = {
+      overridesTriggered:  false,
+      overrides:           [],
+      provisionalDecision: dec,
+      finalDecision:       dec,
     };
   }
   // Migrate old "cap-review" effects on insufficient-data rules to "confidence-warning"
@@ -257,7 +266,7 @@ router.get("/assessments/:id", requireAuth, async (req, res): Promise<void> => {
 
   const patched = {
     ...assessment,
-    scorecard: backfillScorecard(assessment.scorecard, assessment.confidence),
+    scorecard: backfillScorecard(assessment.scorecard, assessment.confidence, assessment.status as "PASS" | "REVIEW" | "FAIL"),
   };
 
   res.json(GetAssessmentResponse.parse(patched));

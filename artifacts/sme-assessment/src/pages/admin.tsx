@@ -240,9 +240,16 @@ export default function AdminPage() {
                     </td>
                     <td className="px-5 py-4">
                       {u.latestAssessment ? (
-                        <div className="flex items-center gap-2">
-                          <StatusBadge status={u.latestAssessment.status} />
-                          <span className="text-xs text-muted-foreground truncate max-w-32">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status={u.latestAssessment.status} />
+                            {(u.latestAssessment as any)?.scorecard?.governanceResult?.overridesTriggered && (
+                              <Badge className="bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100 text-[10px] px-1.5 py-0 h-4 shrink-0">
+                                <ShieldAlert className="h-2.5 w-2.5 mr-0.5" />Gov
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground truncate max-w-36">
                             {u.latestAssessment.fileName}
                           </span>
                         </div>

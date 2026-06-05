@@ -486,6 +486,51 @@ export const GetAssessmentResponse = zod
             .describe(
               "Expense Dependency Intelligence — measures concentration of outflows and identifies dependency risk",
             ),
+          governanceResult: zod
+            .object({
+              overridesTriggered: zod
+                .boolean()
+                .describe("Whether any governance rules were triggered"),
+              overrides: zod
+                .array(
+                  zod
+                    .object({
+                      rule: zod
+                        .string()
+                        .describe("Name of the governance rule triggered"),
+                      triggerCondition: zod
+                        .string()
+                        .describe(
+                          "The condition that caused this rule to fire",
+                        ),
+                      decisionImpact: zod
+                        .string()
+                        .describe(
+                          "How this rule affects the final lending decision",
+                        ),
+                      explanation: zod
+                        .string()
+                        .describe("Human-readable explanation of the override"),
+                    })
+                    .describe(
+                      "A single governance rule that was triggered during assessment",
+                    ),
+                )
+                .describe("List of all triggered governance overrides"),
+              provisionalDecision: zod
+                .enum(["PASS", "REVIEW", "FAIL"])
+                .describe(
+                  "The score-based decision before governance was applied",
+                ),
+              finalDecision: zod
+                .enum(["PASS", "REVIEW", "FAIL"])
+                .describe(
+                  "The final decision after governance overrides are applied",
+                ),
+            })
+            .describe(
+              "Output of the Governance Rules Engine — runs after scoring and may cap the final decision",
+            ),
           configSnapshot: zod
             .object({
               passThreshold: zod.number(),

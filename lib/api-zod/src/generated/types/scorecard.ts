@@ -10,6 +10,7 @@ import type { AssessmentConfidence } from "./assessmentConfidence";
 import type { CashflowStrengthFactor } from "./cashflowStrengthFactor";
 import type { ConsistencyFactor } from "./consistencyFactor";
 import type { ExpenseDependency } from "./expenseDependency";
+import type { GovernanceResult } from "./governanceResult";
 import type { MarginHealth } from "./marginHealth";
 import type { RevenueConcentration } from "./revenueConcentration";
 import type { ScorecardConfigSnapshot } from "./scorecardConfigSnapshot";
@@ -40,6 +41,7 @@ export interface Scorecard {
   revenueConcentration: RevenueConcentration;
   volatilityIntelligence: VolatilityIntelligence;
   expenseDependency: ExpenseDependency;
+  governanceResult: GovernanceResult;
   /** Configuration values used when this assessment was scored */
   configSnapshot: ScorecardConfigSnapshot;
 }

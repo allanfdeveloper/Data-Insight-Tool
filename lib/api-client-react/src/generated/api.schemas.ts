@@ -240,6 +240,58 @@ export interface ExpenseDependency {
 }
 
 /**
+ * A single governance rule that was triggered during assessment
+ */
+export interface GovernanceOverride {
+  /** Name of the governance rule triggered */
+  rule: string;
+  /** The condition that caused this rule to fire */
+  triggerCondition: string;
+  /** How this rule affects the final lending decision */
+  decisionImpact: string;
+  /** Human-readable explanation of the override */
+  explanation: string;
+}
+
+/**
+ * The score-based decision before governance was applied
+ */
+export type GovernanceResultProvisionalDecision =
+  (typeof GovernanceResultProvisionalDecision)[keyof typeof GovernanceResultProvisionalDecision];
+
+export const GovernanceResultProvisionalDecision = {
+  PASS: "PASS",
+  REVIEW: "REVIEW",
+  FAIL: "FAIL",
+} as const;
+
+/**
+ * The final decision after governance overrides are applied
+ */
+export type GovernanceResultFinalDecision =
+  (typeof GovernanceResultFinalDecision)[keyof typeof GovernanceResultFinalDecision];
+
+export const GovernanceResultFinalDecision = {
+  PASS: "PASS",
+  REVIEW: "REVIEW",
+  FAIL: "FAIL",
+} as const;
+
+/**
+ * Output of the Governance Rules Engine — runs after scoring and may cap the final decision
+ */
+export interface GovernanceResult {
+  /** Whether any governance rules were triggered */
+  overridesTriggered: boolean;
+  /** List of all triggered governance overrides */
+  overrides: GovernanceOverride[];
+  /** The score-based decision before governance was applied */
+  provisionalDecision: GovernanceResultProvisionalDecision;
+  /** The final decision after governance overrides are applied */
+  finalDecision: GovernanceResultFinalDecision;
+}
+
+/**
  * Operational margin strength classification based on net cashflow as a percentage of total inflows. Strong = above 30%. Moderate = 15%–30%. Thin = below 15%.
 
  */
@@ -445,6 +497,7 @@ export interface Scorecard {
   revenueConcentration: RevenueConcentration;
   volatilityIntelligence: VolatilityIntelligence;
   expenseDependency: ExpenseDependency;
+  governanceResult: GovernanceResult;
   /** Configuration values used when this assessment was scored */
   configSnapshot: ScorecardConfigSnapshot;
 }

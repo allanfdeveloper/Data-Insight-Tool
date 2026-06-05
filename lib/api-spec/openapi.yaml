@@ -683,6 +683,54 @@ components:
         - scoreModifier
         - observations
 
+    GovernanceOverride:
+      type: object
+      description: A single governance rule that was triggered during assessment
+      properties:
+        rule:
+          type: string
+          description: Name of the governance rule triggered
+        triggerCondition:
+          type: string
+          description: The condition that caused this rule to fire
+        decisionImpact:
+          type: string
+          description: How this rule affects the final lending decision
+        explanation:
+          type: string
+          description: Human-readable explanation of the override
+      required:
+        - rule
+        - triggerCondition
+        - decisionImpact
+        - explanation
+
+    GovernanceResult:
+      type: object
+      description: Output of the Governance Rules Engine — runs after scoring and may cap the final decision
+      properties:
+        overridesTriggered:
+          type: boolean
+          description: Whether any governance rules were triggered
+        overrides:
+          type: array
+          items:
+            $ref: "#/components/schemas/GovernanceOverride"
+          description: List of all triggered governance overrides
+        provisionalDecision:
+          type: string
+          enum: [PASS, REVIEW, FAIL]
+          description: The score-based decision before governance was applied
+        finalDecision:
+          type: string
+          enum: [PASS, REVIEW, FAIL]
+          description: The final decision after governance overrides are applied
+      required:
+        - overridesTriggered
+        - overrides
+        - provisionalDecision
+        - finalDecision
+
     MarginClassification:
       type: string
       enum: [Strong, Moderate, Thin]
@@ -907,6 +955,8 @@ components:
           $ref: "#/components/schemas/VolatilityIntelligence"
         expenseDependency:
           $ref: "#/components/schemas/ExpenseDependency"
+        governanceResult:
+          $ref: "#/components/schemas/GovernanceResult"
         configSnapshot:
           type: object
           description: Configuration values used when this assessment was scored
@@ -947,6 +997,7 @@ components:
         - revenueConcentration
         - volatilityIntelligence
         - expenseDependency
+        - governanceResult
         - triggeredRules
         - configSnapshot
 
