@@ -576,6 +576,23 @@ export interface AdminUserRecord {
   latestAssessment?: Assessment;
 }
 
+export interface StatementMeta {
+  id: number;
+  assessmentId?: number | null;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  uploadedByEmail: string;
+  uploadedAt: string;
+}
+
+export interface StatementPreview {
+  headers: string[];
+  rows: unknown[][];
+  totalRows: number;
+  previewRows: number;
+}
+
 export interface AdminStats {
   totalUsers: number;
   totalAssessments: number;
@@ -589,4 +606,11 @@ export interface AdminStats {
 
 export type UploadAssessmentBody = {
   file: Blob;
+};
+
+export type DeleteAssessmentParams = {
+  /**
+   * Also permanently delete the associated uploaded file
+   */
+  deleteFile?: boolean;
 };

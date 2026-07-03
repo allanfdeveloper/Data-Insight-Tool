@@ -27,9 +27,12 @@ import type {
   AssessmentSummary,
   AuthCredentials,
   AuthResponse,
+  DeleteAssessmentParams,
   ErrorResponse,
   HealthStatus,
   MessageResponse,
+  StatementMeta,
+  StatementPreview,
   UploadAssessmentBody,
   UserProfile,
 } from "./api.schemas";
@@ -688,15 +691,31 @@ export function useGetAssessment<
 /**
  * @summary Delete an assessment (admin only)
  */
-export const getDeleteAssessmentUrl = (id: number) => {
-  return `/api/assessments/${id}`;
+export const getDeleteAssessmentUrl = (
+  id: number,
+  params?: DeleteAssessmentParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/assessments/${id}?${stringifiedParams}`
+    : `/api/assessments/${id}`;
 };
 
 export const deleteAssessment = async (
   id: number,
+  params?: DeleteAssessmentParams,
   options?: RequestInit,
 ): Promise<void> => {
-  return customFetch<void>(getDeleteAssessmentUrl(id), {
+  return customFetch<void>(getDeleteAssessmentUrl(id, params), {
     ...options,
     method: "DELETE",
   });
@@ -709,14 +728,14 @@ export const getDeleteAssessmentMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof deleteAssessment>>,
     TError,
-    { id: number },
+    { id: number; params?: DeleteAssessmentParams },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof deleteAssessment>>,
   TError,
-  { id: number },
+  { id: number; params?: DeleteAssessmentParams },
   TContext
 > => {
   const mutationKey = ["deleteAssessment"];
@@ -730,11 +749,11 @@ export const getDeleteAssessmentMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof deleteAssessment>>,
-    { id: number }
+    { id: number; params?: DeleteAssessmentParams }
   > = (props) => {
-    const { id } = props ?? {};
+    const { id, params } = props ?? {};
 
-    return deleteAssessment(id, requestOptions);
+    return deleteAssessment(id, params, requestOptions);
   };
 
   return { mutationFn, ...mutationOptions };
@@ -756,18 +775,276 @@ export const useDeleteAssessment = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof deleteAssessment>>,
     TError,
-    { id: number },
+    { id: number; params?: DeleteAssessmentParams },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof deleteAssessment>>,
   TError,
-  { id: number },
+  { id: number; params?: DeleteAssessmentParams },
   TContext
 > => {
   return useMutation(getDeleteAssessmentMutationOptions(options));
 };
+
+/**
+ * @summary Get metadata for the uploaded bank statement file
+ */
+export const getGetStatementMetaUrl = (id: number) => {
+  return `/api/assessments/${id}/statement`;
+};
+
+export const getStatementMeta = async (
+  id: number,
+  options?: RequestInit,
+): Promise<StatementMeta> => {
+  return customFetch<StatementMeta>(getGetStatementMetaUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStatementMetaQueryKey = (id: number) => {
+  return [`/api/assessments/${id}/statement`] as const;
+};
+
+export const getGetStatementMetaQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStatementMeta>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStatementMeta>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStatementMetaQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getStatementMeta>>
+  > = ({ signal }) => getStatementMeta(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStatementMeta>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStatementMetaQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStatementMeta>>
+>;
+export type GetStatementMetaQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get metadata for the uploaded bank statement file
+ */
+
+export function useGetStatementMeta<
+  TData = Awaited<ReturnType<typeof getStatementMeta>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getStatementMeta>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStatementMetaQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Permanently delete the uploaded file (admin only)
+ */
+export const getDeleteStatementUrl = (id: number) => {
+  return `/api/assessments/${id}/statement`;
+};
+
+export const deleteStatement = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteStatementUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteStatementMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteStatement>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteStatement>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteStatement"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteStatement>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteStatement(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteStatementMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteStatement>>
+>;
+
+export type DeleteStatementMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Permanently delete the uploaded file (admin only)
+ */
+export const useDeleteStatement = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteStatement>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteStatement>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteStatementMutationOptions(options));
+};
+
+/**
+ * @summary Get a preview of the raw sheet rows (up to 50 rows)
+ */
+export const getPreviewStatementUrl = (id: number) => {
+  return `/api/assessments/${id}/statement/preview`;
+};
+
+export const previewStatement = async (
+  id: number,
+  options?: RequestInit,
+): Promise<StatementPreview> => {
+  return customFetch<StatementPreview>(getPreviewStatementUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getPreviewStatementQueryKey = (id: number) => {
+  return [`/api/assessments/${id}/statement/preview`] as const;
+};
+
+export const getPreviewStatementQueryOptions = <
+  TData = Awaited<ReturnType<typeof previewStatement>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof previewStatement>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getPreviewStatementQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof previewStatement>>
+  > = ({ signal }) => previewStatement(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof previewStatement>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type PreviewStatementQueryResult = NonNullable<
+  Awaited<ReturnType<typeof previewStatement>>
+>;
+export type PreviewStatementQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a preview of the raw sheet rows (up to 50 rows)
+ */
+
+export function usePreviewStatement<
+  TData = Awaited<ReturnType<typeof previewStatement>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof previewStatement>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getPreviewStatementQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get dashboard summary stats for current user

@@ -1,0 +1,122 @@
+Implement a new feature called "Original Bank Statement Access" within the SME Alternative Data Assessment Platform.
+
+OBJECTIVE
+
+Allow authorized administrators and assessors to securely download the exact bank statement that was uploaded for an assessment.
+
+-------------------------------------------------------
+FEATURE REQUIREMENTS
+-------------------------------------------------------
+
+1. Every uploaded bank statement must be permanently linked to its assessment record.
+
+2. Store the following metadata:
+
+- Original filename
+- Upload date/time
+- File size
+- File type (PDF, CSV, XLSX)
+- Uploaded by
+- Assessment ID
+
+3. Add a new section on the Assessment Details page:
+
+----------------------------------
+Original Bank Statement
+----------------------------------
+
+Filename
+Upload Date
+File Size
+Uploaded By
+
+Buttons:
+
+View Statement
+Download Statement
+
+4. "View Statement"
+
+Open the uploaded document in a secure viewer.
+
+PDF:
+Display inside the browser.
+
+CSV/XLSX:
+Open a formatted table preview.
+
+5. "Download Statement"
+
+Downloads the exact original uploaded file without modification.
+
+6. Role Permissions
+
+System Administrator:
+✓ View
+✓ Download
+✓ Delete
+
+Assessor:
+✓ View
+✓ Download
+
+Viewer:
+✓ View only
+
+Public:
+No access.
+
+7. Audit Logging
+
+Log every action.
+
+Timestamp
+User
+Assessment ID
+Action
+
+Examples:
+
+Viewed Statement
+
+Downloaded Statement
+
+Deleted Statement
+
+8. File Retention
+
+If an assessment is deleted,
+allow two options:
+
+Option A
+Delete assessment only
+Keep uploaded statement
+
+Option B
+Delete assessment AND uploaded statement
+
+Show confirmation dialog before deletion.
+
+9. Assessment Report
+
+Include a new File Information section showing:
+
+Original Filename
+
+Upload Date
+
+File Type
+
+File Size
+
+Statement Available: YES
+
+This section should appear at the end of every report.
+
+10. UI
+
+Add a document icon next to the uploaded file.
+
+Use professional banking-style styling consistent with the rest of the platform.
+
+The feature must integrate seamlessly with existing assessment records without affecting scoring, analytics, or reporting logic.

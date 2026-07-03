@@ -211,6 +211,13 @@ paths:
           required: true
           schema:
             type: integer
+        - name: deleteFile
+          in: query
+          required: false
+          description: Also permanently delete the associated uploaded file
+          schema:
+            type: boolean
+            default: false
       responses:
         "204":
           description: Assessment deleted
@@ -220,6 +227,81 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /assessments/{id}/statement:
+    get:
+      operationId: getStatementMeta
+      tags: [assessments]
+      summary: Get metadata for the uploaded bank statement file
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Statement metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementMeta"
+        "404":
+          description: No statement found for this assessment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteStatement
+      tags: [assessments]
+      summary: Permanently delete the uploaded file (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Statement deleted
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /assessments/{id}/statement/preview:
+    get:
+      operationId: previewStatement
+      tags: [assessments]
+      summary: Get a preview of the raw sheet rows (up to 50 rows)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sheet preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementPreview"
         "404":
           description: Not found
           content:
@@ -1211,6 +1293,55 @@ components:
         - isAdmin
         - createdAt
         - assessmentCount
+
+    StatementMeta:
+      type: object
+      properties:
+        id:
+          type: integer
+        assessmentId:
+          type: integer
+          nullable: true
+        fileName:
+          type: string
+        fileSize:
+          type: integer
+        fileType:
+          type: string
+        uploadedByEmail:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - fileName
+        - fileSize
+        - fileType
+        - uploadedByEmail
+        - uploadedAt
+
+    StatementPreview:
+      type: object
+      properties:
+        headers:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          items:
+            type: array
+            items: {}
+        totalRows:
+          type: integer
+        previewRows:
+          type: integer
+      required:
+        - headers
+        - rows
+        - totalRows
+        - previewRows
 
     AdminStats:
       type: object

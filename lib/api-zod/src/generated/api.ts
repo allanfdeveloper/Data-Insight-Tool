@@ -557,6 +557,53 @@ export const DeleteAssessmentParams = zod.object({
   id: zod.coerce.number(),
 });
 
+export const deleteAssessmentQueryDeleteFileDefault = false;
+
+export const DeleteAssessmentQueryParams = zod.object({
+  deleteFile: zod.coerce
+    .boolean()
+    .default(deleteAssessmentQueryDeleteFileDefault)
+    .describe("Also permanently delete the associated uploaded file"),
+});
+
+/**
+ * @summary Get metadata for the uploaded bank statement file
+ */
+export const GetStatementMetaParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetStatementMetaResponse = zod.object({
+  id: zod.number(),
+  assessmentId: zod.number().nullish(),
+  fileName: zod.string(),
+  fileSize: zod.number(),
+  fileType: zod.string(),
+  uploadedByEmail: zod.string(),
+  uploadedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Permanently delete the uploaded file (admin only)
+ */
+export const DeleteStatementParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Get a preview of the raw sheet rows (up to 50 rows)
+ */
+export const PreviewStatementParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const PreviewStatementResponse = zod.object({
+  headers: zod.array(zod.string()),
+  rows: zod.array(zod.array(zod.unknown())),
+  totalRows: zod.number(),
+  previewRows: zod.number(),
+});
+
 /**
  * @summary Get dashboard summary stats for current user
  */

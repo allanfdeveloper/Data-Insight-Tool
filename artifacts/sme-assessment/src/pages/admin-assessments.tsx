@@ -92,7 +92,9 @@ export default function AdminAssessmentsPage() {
   const [confidenceFilter, setConfidenceFilter] = useState("all");
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+  const [deleteAlsoFile, setDeleteAlsoFile] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteAlsoFile, setBulkDeleteAlsoFile] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const deleteMutation = useDeleteAssessment({
@@ -133,8 +135,9 @@ export default function AdminAssessmentsPage() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    await deleteMutation.mutateAsync({ id: deleteTarget.id });
+    await deleteMutation.mutateAsync({ id: deleteTarget.id, params: deleteAlsoFile ? { deleteFile: true } : undefined });
     setDeleteTarget(null);
+    setDeleteAlsoFile(false);
     setSelected((prev) => { const next = new Set(prev); next.delete(deleteTarget.id); return next; });
   };
 
@@ -142,7 +145,7 @@ export default function AdminAssessmentsPage() {
     setIsBulkDeleting(true);
     try {
       for (const id of selected) {
-        await deleteMutation.mutateAsync({ id });
+        await deleteMutation.mutateAsync({ id, params: bulkDeleteAlsoFile ? { deleteFile: true } : undefined });
       }
       setSelected(new Set());
       setBulkDeleteOpen(false);
@@ -340,14 +343,27 @@ export default function AdminAssessmentsPage() {
       </div>
 
       {/* Single delete dialog */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) { setDeleteTarget(null); setDeleteAlsoFile(false); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this assessment permanently?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this assessment?</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>{deleteTarget?.name}</strong> and all associated records will be permanently removed. This cannot be undone.
+              <strong>{deleteTarget?.name}</strong> and all scoring records will be permanently removed. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="px-1 pb-2">
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <Checkbox
+                checked={deleteAlsoFile}
+                onCheckedChange={(v) => setDeleteAlsoFile(!!v)}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm font-medium text-foreground group-hover:text-foreground">Also delete the uploaded file</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Permanently removes the original bank statement from storage. If unchecked, the file is kept but unlinked.</p>
+              </div>
+            </label>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -355,21 +371,34 @@ export default function AdminAssessmentsPage() {
               onClick={handleDelete}
             >
               {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Delete permanently
+              Delete{deleteAlsoFile ? " + File" : " assessment"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* Bulk delete dialog */}
-      <AlertDialog open={bulkDeleteOpen} onOpenChange={(open) => !isBulkDeleting && setBulkDeleteOpen(open)}>
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!isBulkDeleting) { setBulkDeleteOpen(open); if (!open) setBulkDeleteAlsoFile(false); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {selected.size} assessment{selected.size !== 1 ? "s" : ""} permanently?</AlertDialogTitle>
+            <AlertDialogTitle>Delete {selected.size} assessment{selected.size !== 1 ? "s" : ""}?</AlertDialogTitle>
             <AlertDialogDescription>
-              All {selected.size} selected assessment{selected.size !== 1 ? "s" : ""} and their associated records will be permanently removed. This cannot be undone.
+              All {selected.size} selected assessment{selected.size !== 1 ? "s" : ""} and their scoring records will be permanently removed. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="px-1 pb-2">
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <Checkbox
+                checked={bulkDeleteAlsoFile}
+                onCheckedChange={(v) => setBulkDeleteAlsoFile(!!v)}
+                className="mt-0.5"
+              />
+              <div>
+                <p className="text-sm font-medium text-foreground">Also delete all uploaded files</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Permanently removes all original bank statements from storage.</p>
+              </div>
+            </label>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isBulkDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
@@ -378,7 +407,7 @@ export default function AdminAssessmentsPage() {
               disabled={isBulkDeleting}
             >
               {isBulkDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Delete all {selected.size}
+              Delete {selected.size}{bulkDeleteAlsoFile ? " + files" : ""}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

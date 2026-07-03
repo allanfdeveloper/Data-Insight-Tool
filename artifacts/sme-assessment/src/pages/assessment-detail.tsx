@@ -1,5 +1,9 @@
+import { useState } from "react";
 import { Link, useParams } from "wouter";
-import { useGetAssessment, getGetAssessmentQueryKey } from "@workspace/api-client-react";
+import {
+  useGetAssessment, getGetAssessmentQueryKey,
+  useGetStatementMeta, usePreviewStatement,
+} from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import {
   ArrowLeft, CheckCircle2, AlertCircle, XCircle, Loader2,
@@ -7,9 +11,13 @@ import {
   Activity, BarChart3, RefreshCw, AlertTriangle, ShieldX,
   ShieldCheck, ShieldAlert, Info, ArrowUpRight, ArrowDownRight,
   Minus, Zap, Shield, PieChart, Eye, ScrollText,
+  Download, FileText, HardDrive, Lock, X, Table2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose,
+} from "@/components/ui/dialog";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -838,6 +846,201 @@ function NarrativeBlock({ title, text, accent }: { title: string; text: string; 
   );
 }
 
+// ---------- Statement Viewer Modal ----------
+
+function StatementPreviewTable({ assessmentId }: { assessmentId: number }) {
+  const { data, isLoading, isError } = usePreviewStatement(assessmentId);
+  if (isLoading) return (
+    <div className="flex items-center justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+  );
+  if (isError || !data) return (
+    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
+      <Table2 className="h-8 w-8 opacity-30" />
+      <p className="text-sm">Unable to load preview</p>
+    </div>
+  );
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="overflow-auto max-h-[50vh] rounded-lg border border-border">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-muted/50 border-b border-border">
+              {data.headers.map((h) => (
+                <th key={h} className="px-3 py-2 text-left font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {data.rows.map((row, i) => (
+              <tr key={i} className="hover:bg-muted/20">
+                {row.map((cell, j) => (
+                  <td key={j} className="px-3 py-2 text-foreground whitespace-nowrap max-w-48 overflow-hidden text-ellipsis">{String(cell ?? "")}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {data.totalRows > data.previewRows && (
+        <p className="text-xs text-muted-foreground text-center">
+          Showing first {data.previewRows} of {data.totalRows} rows — download the full file to see all data.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function StatementViewerModal({
+  open, onClose, assessmentId, fileName, fileType,
+}: {
+  open: boolean;
+  onClose: () => void;
+  assessmentId: number;
+  fileName: string;
+  fileType: string;
+}) {
+  const isPdf = fileType === "pdf";
+  const viewUrl = `/api/assessments/${assessmentId}/statement/view`;
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-5xl w-full max-h-[90vh] flex flex-col p-0 gap-0">
+        <DialogHeader className="px-6 py-4 border-b border-border flex flex-row items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+              <FileText className="h-4 w-4 text-blue-600" />
+            </div>
+            <div>
+              <DialogTitle className="text-sm font-semibold text-foreground truncate max-w-xl">{fileName}</DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">Original Bank Statement Preview</p>
+            </div>
+          </div>
+          <DialogClose asChild>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          </DialogClose>
+        </DialogHeader>
+        <div className="flex-1 overflow-hidden">
+          {isPdf ? (
+            <iframe
+              src={viewUrl}
+              title="Bank Statement"
+              className="w-full h-full min-h-[60vh]"
+              style={{ border: "none" }}
+            />
+          ) : (
+            <div className="p-6 overflow-auto">
+              <StatementPreviewTable assessmentId={assessmentId} />
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------- Statement Section ----------
+
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${bytes} B`;
+}
+
+function fileTypeLabel(type: string): string {
+  return type.toUpperCase();
+}
+
+function StatementSection({ assessmentId }: { assessmentId: number }) {
+  const { data: meta, isLoading, isError } = useGetStatementMeta(assessmentId);
+  const [viewerOpen, setViewerOpen] = useState(false);
+
+  const downloadUrl = `/api/assessments/${assessmentId}/statement/download`;
+
+  if (isLoading) {
+    return (
+      <div className="bg-card border border-card-border rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="h-5 w-5 rounded bg-muted animate-pulse" />
+          <div className="h-3 w-40 rounded bg-muted animate-pulse" />
+        </div>
+        <div className="h-16 rounded-lg bg-muted animate-pulse" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-card border border-card-border rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <FileText className="h-4 w-4 text-muted-foreground/70" />
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Original Bank Statement</p>
+      </div>
+
+      {isError || !meta ? (
+        <div className="flex items-center gap-3 py-3 px-4 rounded-lg bg-muted/30 border border-dashed border-border">
+          <Lock className="h-4 w-4 text-muted-foreground/50" />
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Statement not available</p>
+            <p className="text-xs text-muted-foreground/70 mt-0.5">This assessment was uploaded before file storage was enabled.</p>
+          </div>
+          <Badge variant="outline" className="ml-auto text-xs text-muted-foreground">Unavailable</Badge>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+            {[
+              { icon: <FileSpreadsheet className="h-3.5 w-3.5" />, label: "Filename", value: meta.fileName },
+              { icon: <Calendar className="h-3.5 w-3.5" />, label: "Uploaded", value: new Date(meta.uploadedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
+              { icon: <HardDrive className="h-3.5 w-3.5" />, label: "File Size", value: formatFileSize(meta.fileSize) },
+              { icon: <Hash className="h-3.5 w-3.5" />, label: "File Type", value: fileTypeLabel(meta.fileType) },
+            ].map(({ icon, label, value }) => (
+              <div key={label} className="flex flex-col gap-1">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                  {icon}{label}
+                </p>
+                <p className="text-sm font-medium text-foreground truncate" title={value}>{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 pt-4 border-t border-card-border">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setViewerOpen(true)}
+            >
+              <Eye className="h-3.5 w-3.5" />
+              View Statement
+            </Button>
+            <a href={downloadUrl} download={meta.fileName}>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Download className="h-3.5 w-3.5" />
+                Download
+              </Button>
+            </a>
+            <Badge variant="outline" className="ml-auto text-green-700 border-green-300 text-xs">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Statement Available
+            </Badge>
+          </div>
+        </>
+      )}
+
+      {meta && (
+        <StatementViewerModal
+          open={viewerOpen}
+          onClose={() => setViewerOpen(false)}
+          assessmentId={assessmentId}
+          fileName={meta.fileName}
+          fileType={meta.fileType}
+        />
+      )}
+    </div>
+  );
+}
+
 function CreditNarrativeSection({ sc, status }: { sc: ScorecardData; status: "PASS" | "REVIEW" | "FAIL" }) {
   const narrative = generateCreditNarrative(sc, status);
   const gov = sc.governanceResult;
@@ -1624,19 +1827,8 @@ export default function AssessmentDetailPage() {
             </div>
           )}
 
-          {/* ── File information ─────────────────────────────────────── */}
-          <div className="bg-card border border-card-border rounded-xl p-5">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">File Information</p>
-            <div className="flex items-center gap-3">
-              <FileSpreadsheet className="h-5 w-5 text-muted-foreground/50" />
-              <div>
-                <p className="text-sm font-medium text-foreground" data-testid="assessment-filename">{assessment.fileName}</p>
-                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />{formatDate(String(assessment.createdAt))}
-                </p>
-              </div>
-            </div>
-          </div>
+          {/* ── Original Bank Statement ──────────────────────────────── */}
+          <StatementSection assessmentId={assessment.id} />
         </>
       )}
     </Layout>

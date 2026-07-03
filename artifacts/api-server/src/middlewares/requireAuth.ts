@@ -11,6 +11,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return;
   }
   (req as any).userId = userId;
+  (req as any).isAdmin = !!(req.session as any).isAdmin;
   next();
 }
 
