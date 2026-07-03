@@ -667,16 +667,19 @@ function generateCreditNarrative(
   const cf      = sc.cashflowStrength;
   const cons    = sc.consistency;
 
-  const netRatioPct  = (cf.netRatio * 100).toFixed(1);
-  const marginPct    = margin ? (margin.marginRatio * 100).toFixed(1) : null;
-  const passThresh   = sc.configSnapshot?.passThreshold ?? 70;
+  // netRatio is stored as 0-1 decimal; marginRatio is stored as 0-100 percent
+  const netRatioPct    = (cf.netRatio * 100).toFixed(1);
+  const marginPct      = margin ? margin.marginRatio.toFixed(1) : null;
+  const passThresh     = sc.configSnapshot?.passThreshold ?? 70;
 
   // ── Section: Financial Strength ──────────────────────────────────────────
+  // Use correct thresholds: marginRatio is already %; netRatio is decimal
+  const marginIsStrong = margin ? margin.marginRatio >= 50 : cf.netRatio >= 0.5;
+  const marginIsOk     = margin ? margin.marginRatio >= 25 : cf.netRatio >= 0.25;
   let financialStrength: string;
-  const mRatio = margin?.marginRatio ?? cf.netRatio;
-  if (mRatio >= 0.5) {
+  if (marginIsStrong) {
     financialStrength = `Financial performance is strong. The business retains a substantial proportion of revenue after expenses, supporting operational resilience.${marginPct ? ` A net margin of ${marginPct}% indicates healthy cash generation relative to total inflows.` : ` A net cashflow ratio of ${netRatioPct}% demonstrates robust cash generation.`}`;
-  } else if (mRatio >= 0.25) {
+  } else if (marginIsOk) {
     financialStrength = `Financial performance is satisfactory with positive operating surplus.${marginPct ? ` A net margin of ${marginPct}% reflects adequate cash generation, though limited headroom may reduce flexibility during periods of stress.` : ` A net cashflow ratio of ${netRatioPct}% reflects adequate but moderate cash generation.`}`;
   } else {
     financialStrength = `Financial performance is constrained and may reduce flexibility during periods of stress.${marginPct ? ` A net margin of ${marginPct}% indicates limited surplus relative to total inflows, which may affect debt serviceability.` : ` A net cashflow ratio of ${netRatioPct}% indicates constrained margins.`}`;
@@ -746,8 +749,8 @@ function generateCreditNarrative(
     `. The business maintains a ${netPosLabel}` +
     (margin
       ? `, with a net margin of ${marginPct}%, ` +
-        (margin.marginRatio >= 0.5 ? "reflecting strong operational efficiency and robust cash retention."
-         : margin.marginRatio >= 0.25 ? "reflecting satisfactory but moderate operational efficiency."
+        (margin.marginRatio >= 50 ? "reflecting strong operational efficiency and robust cash retention."
+         : margin.marginRatio >= 25 ? "reflecting satisfactory but moderate operational efficiency."
          : "indicating constrained financial margins that may limit debt serviceability.")
       : `, with a net cashflow ratio of ${netRatioPct}% of total inflows.`)
   );

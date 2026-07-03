@@ -535,6 +535,38 @@ export interface AssessmentSummary {
   failCount: number;
 }
 
+export type AdminAssessmentStatus =
+  (typeof AdminAssessmentStatus)[keyof typeof AdminAssessmentStatus];
+
+export const AdminAssessmentStatus = {
+  PASS: "PASS",
+  REVIEW: "REVIEW",
+  FAIL: "FAIL",
+} as const;
+
+export type AdminAssessmentConfidence =
+  (typeof AdminAssessmentConfidence)[keyof typeof AdminAssessmentConfidence];
+
+export const AdminAssessmentConfidence = {
+  HIGH: "HIGH",
+  MEDIUM: "MEDIUM",
+  LOW: "LOW",
+} as const;
+
+export interface AdminAssessment {
+  id: number;
+  userId: number;
+  userEmail: string;
+  fileName: string;
+  status: AdminAssessmentStatus;
+  confidence: AdminAssessmentConfidence;
+  totalInflow: number;
+  totalOutflow: number;
+  transactionCount: number;
+  totalScore?: number | null;
+  createdAt: string;
+}
+
 export interface AdminUserRecord {
   id: number;
   email: string;

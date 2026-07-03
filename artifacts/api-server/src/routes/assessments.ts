@@ -5,7 +5,7 @@ import { db, usersTable, assessmentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
 import { parseFile } from "../lib/parseExcel";
 import { computeScorecard } from "../lib/scorecard";
-import { getOrCreateConfig } from "./admin";
+import { getOrCreateConfig, requireAdmin } from "./admin";
 import {
   ListAssessmentsResponse,
   GetAssessmentParams,
@@ -270,6 +270,28 @@ router.get("/assessments/:id", requireAuth, async (req, res): Promise<void> => {
   };
 
   res.json(GetAssessmentResponse.parse(patched));
+});
+
+/* DELETE /assessments/:id — admin only */
+router.delete("/assessments/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid assessment ID." });
+    return;
+  }
+
+  const [assessment] = await db
+    .select({ id: assessmentsTable.id })
+    .from(assessmentsTable)
+    .where(eq(assessmentsTable.id, id));
+
+  if (!assessment) {
+    res.status(404).json({ error: "Assessment not found." });
+    return;
+  }
+
+  await db.delete(assessmentsTable).where(eq(assessmentsTable.id, id));
+  res.status(204).send();
 });
 
 export default router;

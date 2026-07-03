@@ -7,6 +7,9 @@
  */
 
 export * from "./activityLevelFactor";
+export * from "./adminAssessment";
+export * from "./adminAssessmentConfidence";
+export * from "./adminAssessmentStatus";
 export * from "./adminStats";
 export * from "./adminUserRecord";
 export * from "./assessment";

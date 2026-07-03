@@ -8,6 +8,7 @@ import SignupPage from "@/pages/signup";
 import DashboardPage from "@/pages/dashboard";
 import AssessmentDetailPage from "@/pages/assessment-detail";
 import AdminPage from "@/pages/admin";
+import AdminAssessmentsPage from "@/pages/admin-assessments";
 import AdminSettingsPage from "@/pages/admin-settings";
 import NotFound from "@/pages/not-found";
 
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/signup" component={SignupPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/assessment/:id" component={AssessmentDetailPage} />
+      <Route path="/admin/assessments" component={AdminAssessmentsPage} />
       <Route path="/admin/settings" component={AdminSettingsPage} />
       <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />

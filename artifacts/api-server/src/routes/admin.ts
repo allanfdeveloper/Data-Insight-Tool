@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { desc, eq, count } from "drizzle-orm";
+import { desc, eq, count, sql } from "drizzle-orm";
 import { db, usersTable, assessmentsTable, assessmentConfigTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth";
 import {
@@ -7,6 +7,7 @@ import {
   AdminGetStatsResponse,
   AdminGetSettingsResponse,
   AdminUpdateSettingsBody,
+  AdminListAssessmentsResponse,
 } from "@workspace/api-zod";
 import type { AssessmentEngineConfig } from "../lib/scorecard";
 
@@ -15,7 +16,7 @@ const router: IRouter = Router();
 /**
  * Middleware to require admin — checks if the logged-in user is an admin.
  */
-async function requireAdmin(req: any, res: any, next: any): Promise<void> {
+export async function requireAdmin(req: any, res: any, next: any): Promise<void> {
   const userId = (req as any).userId as number;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   if (!user || !user.isAdmin) {
@@ -47,6 +48,59 @@ export async function getOrCreateConfig(): Promise<AssessmentEngineConfig & { id
     .returning();
   return inserted as any;
 }
+
+/* GET /admin/assessments — all assessments across all users (admin) */
+router.get("/admin/assessments", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const rows = await db
+    .select({
+      id:               assessmentsTable.id,
+      userId:           assessmentsTable.userId,
+      userEmail:        usersTable.email,
+      fileName:         assessmentsTable.fileName,
+      status:           assessmentsTable.status,
+      confidence:       assessmentsTable.confidence,
+      totalInflow:      assessmentsTable.totalInflow,
+      totalOutflow:     assessmentsTable.totalOutflow,
+      transactionCount: assessmentsTable.transactionCount,
+      scorecard:        assessmentsTable.scorecard,
+      createdAt:        assessmentsTable.createdAt,
+    })
+    .from(assessmentsTable)
+    .innerJoin(usersTable, eq(assessmentsTable.userId, usersTable.id))
+    .orderBy(desc(assessmentsTable.createdAt));
+
+  const mapped = rows.map((r) => ({
+    ...r,
+    totalScore: (r.scorecard as any)?.totalScore ?? null,
+    scorecard:  undefined,
+  }));
+
+  res.json(AdminListAssessmentsResponse.parse(mapped));
+});
+
+/* DELETE /admin/users/:id — delete a user and all their data (admin) */
+router.delete("/admin/users/:id", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const targetId = parseInt(req.params.id, 10);
+  const requesterId = (req as any).userId as number;
+
+  if (isNaN(targetId)) {
+    res.status(400).json({ error: "Invalid user ID." });
+    return;
+  }
+  if (targetId === requesterId) {
+    res.status(400).json({ error: "Cannot delete your own account." });
+    return;
+  }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
+  if (!user) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  await db.delete(usersTable).where(eq(usersTable.id, targetId));
+  res.status(204).send();
+});
 
 /* GET /admin/users — all users with their assessments */
 router.get("/admin/users", requireAuth, requireAdmin, async (req, res): Promise<void> => {

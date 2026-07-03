@@ -551,6 +551,13 @@ export const GetAssessmentResponse = zod
   );
 
 /**
+ * @summary Delete an assessment (admin only)
+ */
+export const DeleteAssessmentParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary Get dashboard summary stats for current user
  */
 export const GetAssessmentSummaryResponse = zod.object({
@@ -576,6 +583,26 @@ export const GetAssessmentSummaryResponse = zod.object({
   reviewCount: zod.number(),
   failCount: zod.number(),
 });
+
+/**
+ * @summary Admin - list all assessments across all users
+ */
+export const AdminListAssessmentsResponseItem = zod.object({
+  id: zod.number(),
+  userId: zod.number(),
+  userEmail: zod.string(),
+  fileName: zod.string(),
+  status: zod.enum(["PASS", "REVIEW", "FAIL"]),
+  confidence: zod.enum(["HIGH", "MEDIUM", "LOW"]),
+  totalInflow: zod.number(),
+  totalOutflow: zod.number(),
+  transactionCount: zod.number(),
+  totalScore: zod.number().nullish(),
+  createdAt: zod.coerce.date(),
+});
+export const AdminListAssessmentsResponse = zod.array(
+  AdminListAssessmentsResponseItem,
+);
 
 /**
  * @summary Admin - list all users with their assessments
@@ -618,6 +645,13 @@ export const AdminGetStatsResponse = zod.object({
   highConfidenceCount: zod.number(),
   mediumConfidenceCount: zod.number(),
   lowConfidenceCount: zod.number(),
+});
+
+/**
+ * @summary Admin - delete a user and all their data
+ */
+export const AdminDeleteUserParams = zod.object({
+  id: zod.coerce.number(),
 });
 
 /**

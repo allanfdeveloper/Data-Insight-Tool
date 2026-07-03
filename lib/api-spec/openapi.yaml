@@ -201,6 +201,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteAssessment
+      tags: [assessments]
+      summary: Delete an assessment (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Assessment deleted
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /assessments/summary:
     get:
@@ -216,6 +241,33 @@ paths:
                 $ref: "#/components/schemas/AssessmentSummary"
         "401":
           description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/assessments:
+    get:
+      operationId: adminListAssessments
+      tags: [admin]
+      summary: Admin - list all assessments across all users
+      responses:
+        "200":
+          description: All assessments with user info
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminAssessment"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -268,6 +320,39 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{id}:
+    delete:
+      operationId: adminDeleteUser
+      tags: [admin]
+      summary: Admin - delete a user and all their data
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: User deleted
+        "400":
+          description: Cannot delete own account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
           content:
             application/json:
               schema:
@@ -1062,6 +1147,47 @@ components:
         - passCount
         - reviewCount
         - failCount
+
+    AdminAssessment:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        userEmail:
+          type: string
+        fileName:
+          type: string
+        status:
+          type: string
+          enum: [PASS, REVIEW, FAIL]
+        confidence:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        totalInflow:
+          type: number
+        totalOutflow:
+          type: number
+        transactionCount:
+          type: integer
+        totalScore:
+          type: number
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - userEmail
+        - fileName
+        - status
+        - confidence
+        - totalInflow
+        - totalOutflow
+        - transactionCount
+        - createdAt
 
     AdminUserRecord:
       type: object

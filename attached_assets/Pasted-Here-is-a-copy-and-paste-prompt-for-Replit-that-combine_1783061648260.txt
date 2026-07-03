@@ -1,0 +1,363 @@
+Here is a copy-and-paste prompt for Replit that combines both the Credit Narrative percentage-formatting fix and the administrative data management functionality.
+
+
+---
+
+PROMPT
+
+We are preparing the MVP of the SME Alternative Data Assessment Platform for external validation.
+
+Do NOT redesign the platform. Do NOT modify any scoring logic. Do NOT change any thresholds. Do NOT change any assessment calculations.
+
+Only implement the following improvements.
+
+
+---
+
+TASK 1 — FIX CREDIT NARRATIVE PERCENTAGE FORMATTING
+
+The Credit Narrative currently displays incorrect percentages because decimal ratios are being multiplied twice.
+
+For example:
+
+Net ratio = 0.599
+
+is displayed as
+
+59.9%
+
+inside the dashboard
+
+but inside the narrative it becomes
+
+5990%
+
+which is incorrect.
+
+Other examples include:
+
+62% → 6200%
+
+58.3% → 5833%
+
+66.7% → 6667%
+
+-30% → -3000%
+
+The dashboard values are correct.
+
+Only the narrative generation is incorrect.
+
+Required Fix
+
+Audit every percentage inserted into the Credit Narrative.
+
+Wherever percentages are inserted into text:
+
+Executive Summary
+
+Financial Strength
+
+Revenue Quality
+
+Expense Structure
+
+Volatility
+
+Trend
+
+Governance Commentary
+
+Recommendation
+
+use the already formatted percentage value.
+
+Do NOT multiply by 100 again.
+
+If the value already equals:
+
+59.9
+
+display
+
+59.9%
+
+NOT
+
+5990%.
+
+Apply this consistently throughout the Narrative Engine.
+
+
+---
+
+TASK 2 — ADMINISTRATIVE DATA MANAGEMENT
+
+Add an Administrator Data Management section.
+
+The administrator must be able to manage uploaded assessment data.
+
+Create a simple management interface.
+
+Include:
+
+Uploaded Assessment Files
+
+Display every uploaded dataset.
+
+Show:
+
+Filename
+
+Upload Date
+
+Business Name (if available)
+
+Assessment Result
+
+Score
+
+Status
+
+Actions
+
+Actions:
+
+View
+
+Delete
+
+Delete must permanently remove:
+
+uploaded file
+
+parsed transactions
+
+assessment results
+
+generated narrative
+
+charts
+
+cached calculations
+
+all linked records
+
+Before deleting:
+
+Show confirmation dialog
+
+"Delete this assessment permanently?"
+
+Require confirmation.
+
+
+---
+
+User Management
+
+Create an Admin Users page.
+
+Display:
+
+Name
+
+Email
+
+Role
+
+Date Created
+
+Number of Assessments
+
+Last Login (if available)
+
+Actions
+
+View
+
+Delete
+
+Deleting a user must remove:
+
+account
+
+uploaded datasets
+
+assessments
+
+reports
+
+cached files
+
+linked records
+
+Require confirmation.
+
+
+---
+
+Assessment History
+
+Create an Assessment History page.
+
+Allow filtering by:
+
+Business Name
+
+Date
+
+Score
+
+Decision
+
+Confidence
+
+Status
+
+Include bulk delete.
+
+
+---
+
+Search
+
+Allow searching uploaded assessments.
+
+Search by:
+
+Business Name
+
+Filename
+
+Date
+
+User
+
+Assessment Result
+
+
+---
+
+Safety
+
+Only Administrators can delete.
+
+Normal users cannot.
+
+
+---
+
+TASK 3 — DELETE CASCADE
+
+Ensure deleting an assessment removes:
+
+transaction records
+
+monthly summaries
+
+KPIs
+
+charts
+
+diagnostics
+
+governance decisions
+
+credit narrative
+
+cached statistics
+
+uploaded file
+
+database references
+
+No orphan records should remain.
+
+
+---
+
+TASK 4 — DELETE USER CASCADE
+
+Deleting a user must remove:
+
+user profile
+
+all uploaded assessments
+
+all reports
+
+all datasets
+
+all generated analytics
+
+all cached calculations
+
+database references
+
+No orphan records.
+
+
+---
+
+TASK 5 — PRESERVE EVERYTHING ELSE
+
+Do NOT modify:
+
+Scoring Engine
+
+Confidence Engine
+
+Governance Engine
+
+Trend Engine
+
+Volatility Engine
+
+Narrative Logic
+
+Dashboard Layout
+
+Business Logic
+
+Thresholds
+
+Weights
+
+Validation Results
+
+Only implement:
+
+1. Narrative percentage formatting fix
+
+
+2. Assessment deletion
+
+
+3. User deletion
+
+
+4. Assessment management
+
+
+5. User management
+
+
+
+
+---
+
+Expected Result
+
+After implementation:
+
+Every percentage in the Credit Narrative matches the dashboard exactly (e.g., 59.9%, not 5990%).
+
+Administrators can securely view, search, and permanently delete uploaded assessments and user accounts.
+
+Deletions cascade cleanly, leaving no orphaned records.
+
+All existing assessment logic, scoring, governance rules, and reporting remain unchanged.
+
+
+This prompt is scoped to the exact changes needed for your MVP before validation and should avoid unintended changes to the assessment engine.
