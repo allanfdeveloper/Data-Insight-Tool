@@ -658,6 +658,7 @@ interface CreditNarrative {
   expenseStructure: string;
   stability: string;
   trend: string;
+  creditRisk: string;
   governanceCommentary: string[];
   finalRecommendation: string;
 }
@@ -666,31 +667,82 @@ function generateCreditNarrative(
   sc: ScorecardData,
   status: "PASS" | "REVIEW" | "FAIL",
 ): CreditNarrative {
-  const margin  = sc.marginHealth;
-  const rc      = sc.revenueConcentration;
-  const ed      = sc.expenseDependency;
-  const vi      = sc.volatilityIntelligence;
-  const ta      = sc.trendAnalysis;
-  const gov     = sc.governanceResult;
-  const cf      = sc.cashflowStrength;
-  const cons    = sc.consistency;
+  const margin = sc.marginHealth;
+  const rc     = sc.revenueConcentration;
+  const ed     = sc.expenseDependency;
+  const vi     = sc.volatilityIntelligence;
+  const ta     = sc.trendAnalysis;
+  const gov    = sc.governanceResult;
+  const cf     = sc.cashflowStrength;
+  const cons   = sc.consistency;
 
-  // netRatio is stored as 0-1 decimal; marginRatio is stored as 0-100 percent
-  const netRatioPct    = (cf.netRatio * 100).toFixed(1);
-  const marginPct      = margin ? margin.marginRatio.toFixed(1) : null;
-  const passThresh     = sc.configSnapshot?.passThreshold ?? 70;
+  // netRatio stored as 0–1 decimal; marginRatio stored as 0–100 percent
+  const netRatioPct = (cf.netRatio * 100).toFixed(1);
+  const marginPct   = margin ? margin.marginRatio.toFixed(1) : null;
+  const passThresh  = sc.configSnapshot?.passThreshold ?? 70;
+
+  // ── Derived risk/strength signals used for reconciliation throughout ─────
+  const isMarginStrong      = margin ? margin.marginRatio >= 50 : cf.netRatio >= 0.5;
+  const isMarginOk          = margin ? margin.marginRatio >= 25 : cf.netRatio >= 0.25;
+  const hasHighVolatility   = !!(vi && !vi.isInsufficientHistory && vi.classification === "HIGH");
+  const hasModVolatility    = !!(vi && !vi.isInsufficientHistory && vi.classification === "MODERATE");
+  const isConsistencyWeak   = typeof cons.normalizedScore === "number" && cons.normalizedScore < 45;
+  const hasTrendPositive    = !!(ta && !ta.isInsufficientHistory && ta.classification === "POSITIVE");
+  const hasTrendDeterior    = !!(ta && !ta.isInsufficientHistory && ta.classification === "NEGATIVE");
+  const hasGovOverride      = !!(gov?.overridesTriggered);
+
+  // Collect strengths and risks for the synthesis and recommendation sections
+  const strengthFactors: string[] = [];
+  const riskFactors: string[]     = [];
+
+  if (isMarginStrong)  strengthFactors.push("strong operating cash generation");
+  else if (isMarginOk) strengthFactors.push("positive operating surplus");
+  if (!hasHighVolatility && !isConsistencyWeak) strengthFactors.push("stable and predictable revenue patterns");
+  if (rc && rc.risk === "LOW")  strengthFactors.push("diversified revenue sources");
+  if (ed && ed.risk === "LOW")  strengthFactors.push("a well-distributed expense structure");
+  if (hasTrendPositive)         strengthFactors.push("an improving financial trajectory");
+
+  if (hasHighVolatility)
+    riskFactors.push(`high cashflow volatility (CV: ${vi!.cv.toFixed(1)}%) limits repayment predictability`);
+  else if (hasModVolatility)
+    riskFactors.push("moderate cashflow volatility introduces uncertainty in consistent repayment capacity");
+  if (isConsistencyWeak)
+    riskFactors.push("irregular income patterns reduce confidence in sustained cashflow");
+  if (rc && rc.risk === "HIGH")
+    riskFactors.push(`elevated revenue concentration (${rc.largestInflowPct.toFixed(1)}% from a single source) creates counterparty dependency risk`);
+  else if (rc && rc.risk === "MODERATE")
+    riskFactors.push(`moderate revenue concentration (${rc.largestInflowPct.toFixed(1)}% from the largest source) warrants monitoring`);
+  if (ed && ed.risk === "HIGH")
+    riskFactors.push("high expense dependency introduces cost-side vulnerability");
+  if (hasTrendDeterior)
+    riskFactors.push("a deteriorating performance trend raises concerns about forward-looking repayment capacity");
+  if (ta?.isSevereDeterioration)
+    riskFactors.push("severe cashflow deterioration has been identified");
+  if (margin && margin.classification === "Thin")
+    riskFactors.push("thin operational margins provide limited buffer for debt servicing under adverse conditions");
 
   // ── Section: Financial Strength ──────────────────────────────────────────
-  // Use correct thresholds: marginRatio is already %; netRatio is decimal
-  const marginIsStrong = margin ? margin.marginRatio >= 50 : cf.netRatio >= 0.5;
-  const marginIsOk     = margin ? margin.marginRatio >= 25 : cf.netRatio >= 0.25;
+  const cashDesc = marginPct
+    ? `a net operating margin of ${marginPct}%`
+    : `a net cashflow ratio of ${netRatioPct}%`;
+
   let financialStrength: string;
-  if (marginIsStrong) {
-    financialStrength = `Financial performance is strong. The business retains a substantial proportion of revenue after expenses, supporting operational resilience.${marginPct ? ` A net margin of ${marginPct}% indicates healthy cash generation relative to total inflows.` : ` A net cashflow ratio of ${netRatioPct}% demonstrates robust cash generation.`}`;
-  } else if (marginIsOk) {
-    financialStrength = `Financial performance is satisfactory with positive operating surplus.${marginPct ? ` A net margin of ${marginPct}% reflects adequate cash generation, though limited headroom may reduce flexibility during periods of stress.` : ` A net cashflow ratio of ${netRatioPct}% reflects adequate but moderate cash generation.`}`;
+  if (isMarginStrong) {
+    if (hasHighVolatility || isConsistencyWeak) {
+      financialStrength = `The business currently generates strong operating cash surpluses, with ${cashDesc} indicating healthy retention of revenue after expenses. This reflects sound operational management and confirms that the business is profitable on a current basis. However, operational profitability and repayment reliability are distinct credit considerations. Strong margins confirm the business can generate surplus, but they do not in themselves guarantee that this surplus will be generated consistently and predictably over the term of a debt obligation.`;
+    } else if (hasModVolatility) {
+      financialStrength = `The business demonstrates strong operational financial performance, with ${cashDesc} reflecting robust cash generation relative to total inflows. Margins are healthy and indicate the business retains a significant share of its revenue after meeting expenses. Some moderate variation in monthly cashflow is noted, but this does not materially detract from the overall strength of the financial position.`;
+    } else {
+      financialStrength = `The business demonstrates strong operational financial performance, with ${cashDesc} reflecting robust cash generation relative to total inflows. The level of surplus indicates healthy operational efficiency and supports confidence in the business's capacity to service debt obligations from ongoing cash generation.`;
+    }
+  } else if (isMarginOk) {
+    if (hasHighVolatility || isConsistencyWeak) {
+      financialStrength = `The business maintains a positive operating surplus, with ${cashDesc} indicating satisfactory cash generation. While operations are currently profitable, the financial headroom is moderate. Combined with the revenue variability identified elsewhere in this assessment, the current margin level provides a limited buffer against fluctuations in revenue or unforeseen cost pressures that could affect debt serviceability.`;
+    } else {
+      financialStrength = `The business maintains a positive operating surplus, with ${cashDesc} indicating satisfactory cash generation. Margins are adequate and suggest the business is financially sustainable under current operating conditions, though the available headroom may reduce flexibility during periods of stress.`;
+    }
   } else {
-    financialStrength = `Financial performance is constrained and may reduce flexibility during periods of stress.${marginPct ? ` A net margin of ${marginPct}% indicates limited surplus relative to total inflows, which may affect debt serviceability.` : ` A net cashflow ratio of ${netRatioPct}% indicates constrained margins.`}`;
+    financialStrength = `Financial performance is constrained, with ${cashDesc} indicating limited operating surplus relative to total inflows. The business is generating positive cashflow, but the narrow margin provides very limited capacity to absorb adverse conditions or sustain regular debt repayment without revenue remaining stable. Any deterioration in revenue would place immediate pressure on debt serviceability.`;
   }
 
   // ── Section: Revenue Quality ─────────────────────────────────────────────
@@ -698,11 +750,14 @@ function generateCreditNarrative(
   if (!rc) {
     revenueQuality = "Revenue concentration analysis is not available for this assessment.";
   } else if (rc.risk === "LOW") {
-    revenueQuality = `Revenue appears reasonably diversified. Analysis of inflow sources indicates no material concentration risk, with the largest single inflow representing ${rc.largestInflowPct.toFixed(1)}% of total revenue across ${rc.inflowCount} distinct sources.`;
+    const diverseNote = `Revenue sources appear reasonably diversified across ${rc.inflowCount} distinct inflow sources, with the largest single source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts, presenting no material concentration risk.`;
+    revenueQuality = hasHighVolatility
+      ? `${diverseNote} However, diversification of inflow sources does not eliminate repayment risk where the volume of those inflows fluctuates significantly between periods. The combination of diverse but volatile revenue streams still creates uncertainty for consistent debt servicing.`
+      : `${diverseNote} This distribution does not create material exposure to the loss of any single revenue source, which supports confidence in the stability of the business's income base.`;
   } else if (rc.risk === "MODERATE") {
-    revenueQuality = `Revenue concentration risk is present and should be monitored. The largest single inflow source represents ${rc.largestInflowPct.toFixed(1)}% of total revenue, which may expose the business to client or counterparty dependency.`;
+    revenueQuality = `Revenue concentration risk is present and warrants monitoring. The largest single inflow source represents ${rc.largestInflowPct.toFixed(1)}% of total receipts${rc.top3Pct ? `, with the top three sources accounting for ${rc.top3Pct.toFixed(1)}%` : ""}. This level of dependency introduces counterparty and client concentration risk — a material reduction in activity from the dominant revenue source could directly affect cashflow available for debt servicing.`;
   } else {
-    revenueQuality = `Revenue concentration risk is elevated due to dependency on a limited number of inflows. The largest single source represents ${rc.largestInflowPct.toFixed(1)}% of total revenue, creating material exposure to revenue disruption should that source diminish or cease.`;
+    revenueQuality = `Revenue concentration risk is elevated and represents a material credit concern. The business appears highly dependent on a limited number of inflow sources, with the largest single source accounting for ${rc.largestInflowPct.toFixed(1)}% of total receipts${rc.top3Pct ? ` and the top three sources comprising ${rc.top3Pct.toFixed(1)}%` : ""}. The loss or reduction of the dominant revenue source would likely have an immediate and severe impact on the business's ability to service any debt obligation.`;
   }
 
   // ── Section: Expense Structure ───────────────────────────────────────────
@@ -710,119 +765,192 @@ function generateCreditNarrative(
   if (!ed) {
     expenseStructure = "Expense structure analysis is not available for this assessment.";
   } else if (ed.risk === "LOW") {
-    expenseStructure = `Expense structure appears diversified. No single expense category represents a disproportionate share of total outflows, with the largest item at ${ed.largestExpensePct.toFixed(1)}% of expenditure across ${ed.outflowCount} distinct expense categories.`;
+    expenseStructure = `The expense base appears well-distributed across ${ed.outflowCount} distinct expense categories, with the largest single item representing ${ed.largestExpensePct.toFixed(1)}% of total outflows. This diversification reduces the risk of operational disruption from the loss of a single supplier or a spike in any one cost category, supporting overall operational resilience.`;
   } else if (ed.risk === "MODERATE") {
-    expenseStructure = `Moderate expense concentration exists. The largest expense category accounts for ${ed.largestExpensePct.toFixed(1)}% of total outflows, indicating some dependency on a specific supplier or cost category that warrants monitoring.`;
+    expenseStructure = `The expense structure shows moderate concentration, with the largest cost item representing ${ed.largestExpensePct.toFixed(1)}% of total outflows${ed.top3Pct ? ` and the top three expense categories accounting for ${ed.top3Pct.toFixed(1)}%` : ""}. This warrants monitoring, as a disruption to or significant increase in the dominant cost category could constrain available cashflow and reduce debt servicing capacity.`;
   } else {
-    expenseStructure = `Expense dependency risk is elevated due to reliance on a small number of suppliers or cost categories. The largest single expense represents ${ed.largestExpensePct.toFixed(1)}% of total outflows, which may expose the business to cost volatility or supply disruption.`;
+    expenseStructure = `Expense dependency risk is elevated. The business demonstrates high reliance on a small number of cost categories or suppliers, with the largest single expense representing ${ed.largestExpensePct.toFixed(1)}% of total outflows${ed.top3Pct ? ` and the top three items comprising ${ed.top3Pct.toFixed(1)}%` : ""}. A significant disruption or cost increase in the dominant expense category would place direct pressure on net cashflow and debt serviceability.`;
   }
 
-  // ── Section: Stability ───────────────────────────────────────────────────
+  // ── Section: Stability & Volatility ──────────────────────────────────────
+  const irregFlagsSummary = cons.irregularityFlags && cons.irregularityFlags.length > 0
+    ? cons.irregularityFlags.join("; ")
+    : null;
+
   let stability: string;
   if (!vi || vi.isInsufficientHistory) {
-    stability = "Cashflow volatility analysis could not be completed due to insufficient transaction history.";
+    stability = cons.monthCount < 2
+      ? "Revenue stability and volatility analysis could not be completed due to insufficient transaction history. A minimum of two months of data is required to assess cashflow patterns. This limitation reduces confidence in forward-looking repayment assessments."
+      : "Cashflow volatility analysis could not be completed due to insufficient monthly history. Income consistency has been evaluated from available data, but the findings should be interpreted with caution given the limited assessment window.";
   } else if (vi.classification === "LOW") {
-    stability = `Revenue patterns are stable and predictable. Cashflow volatility is low (CV: ${vi.cv.toFixed(1)}%), supporting consistent and reliable debt serviceability assessment.`;
+    stability = `Revenue patterns are stable and predictable, with cashflow volatility measured at a low coefficient of variation of ${vi.cv.toFixed(1)}%. Consistent monthly revenue generation is a positive indicator for repayment predictability, as it reduces the risk of cashflow shortfalls during the repayment period.${irregFlagsSummary ? ` Despite low statistical volatility, the following irregularities were identified in the inflow pattern: ${irregFlagsSummary}. These should be considered alongside the overall stability picture.` : ""}`;
   } else if (vi.classification === "MODERATE") {
-    stability = `Some fluctuations are present but remain manageable. Cashflow volatility is moderate (CV: ${vi.cv.toFixed(1)}%), which does not preclude lending but warrants ongoing monitoring of revenue performance.`;
+    stability = `Monthly cashflow shows moderate variation, with a coefficient of variation of ${vi.cv.toFixed(1)}% indicating manageable but noticeable fluctuations in revenue. This level of variability does not preclude lending but warrants careful consideration of repayment structure. A conservative debt service coverage ratio may be appropriate to accommodate periods of lower-than-average cashflow.${irregFlagsSummary ? ` Additional income irregularities noted: ${irregFlagsSummary}.` : ""}`;
   } else {
-    stability = `Revenue patterns are highly unpredictable and may affect future repayment capacity. Cashflow volatility is elevated (CV: ${vi.cv.toFixed(1)}%), indicating significant month-to-month variation in revenue that creates uncertainty for debt servicing.`;
+    const marginReconcile = isMarginStrong
+      ? " It is important to distinguish between current profitability and future repayment reliability: strong current margins indicate the business can generate surplus today, but high cashflow volatility means this level of surplus cannot be relied upon consistently over a lending period."
+      : isMarginOk
+        ? " This volatility, combined with moderate margins, reduces confidence in the business's ability to maintain consistent repayment throughout a lending period."
+        : " This high volatility, alongside constrained margins, presents a compounding credit risk — both the level and consistency of surplus cashflow are uncertain.";
+    stability = `Revenue patterns are highly unpredictable, with a coefficient of variation of ${vi.cv.toFixed(1)}% indicating significant month-to-month fluctuation in inflows. This level of volatility limits confidence in the business's ability to generate consistent cashflow for debt repayment.${marginReconcile}${irregFlagsSummary ? ` The following income irregularities were also identified: ${irregFlagsSummary}.` : ""}`;
   }
 
   // ── Section: Trend ───────────────────────────────────────────────────────
   let trend: string;
   if (!ta || ta.isInsufficientHistory) {
-    trend = "Trend analysis could not be completed due to insufficient historical data.";
+    trend = "Trend analysis could not be completed due to insufficient historical data. At least two months of inflow activity are required to assess the directional trajectory of the business. The absence of trend data limits forward-looking assessment confidence.";
   } else if (ta.classification === "POSITIVE") {
-    trend = `Business performance is improving. ${ta.explanations[0] ?? "Revenue and cashflow indicators show a positive trajectory over the assessment period, suggesting strengthening financial capacity."}`;
+    const detail = ta.explanations[0] ?? "Revenue and cashflow indicators show a positive trajectory over the assessment period.";
+    const cautionNote = hasHighVolatility
+      ? " However, the positive trajectory should be interpreted in the context of high cashflow volatility identified elsewhere in this assessment. An improving average trend does not eliminate the risk of significant cashflow shortfalls in individual months, which could affect timely debt repayment."
+      : "";
+    trend = `${detail} An improving financial trajectory is a positive forward-looking indicator, suggesting the business is strengthening its operating position and may have increasing capacity to service debt obligations.${cautionNote}`;
   } else if (ta.classification === "STABLE") {
-    trend = `No material deterioration or improvement detected. ${ta.explanations[0] ?? "Revenue and cashflow metrics have remained broadly consistent over the assessment period."}`;
+    const detail = ta.explanations[0] ?? "Revenue and cashflow metrics have remained broadly consistent over the assessment period.";
+    trend = `${detail} The absence of a deteriorating trend is a neutral-to-positive finding, indicating that current financial performance levels are sustainable under recent operating conditions. Stable historical performance does not guarantee continued stability, particularly where other credit risk factors are present.`;
   } else {
-    trend = `Deterioration detected in revenue, profitability, or net cashflow trends. ${ta.explanations[0] ?? "Revenue and cashflow indicators show a declining trajectory over the assessment period, which may affect forward-looking repayment capacity."}`;
+    const detail = ta.explanations[0] ?? "Revenue and cashflow indicators show a declining trajectory over the assessment period.";
+    const severeNote = ta.isSevereDeterioration
+      ? " Deterioration is classified as severe, with both inflows and net cashflow declining at a rate that, if sustained, would materially impair the business's capacity to service a debt obligation within a standard lending period."
+      : "";
+    trend = `${detail}${severeNote} A deteriorating trend is a significant credit concern, as it raises questions about the sustainability of current performance and the business's ability to maintain cashflow sufficient for debt repayment over the agreed term.`;
+  }
+
+  // ── Section: Credit Risk Synthesis ───────────────────────────────────────
+  // Reconciles operational strengths with lending risk factors into one picture.
+  let creditRisk: string;
+  if (strengthFactors.length > 0 && riskFactors.length > 0) {
+    const strengthText = strengthFactors.length === 1
+      ? strengthFactors[0]
+      : strengthFactors.slice(0, -1).join(", ") + " and " + strengthFactors[strengthFactors.length - 1];
+    const riskList = riskFactors.map((r, i) => `(${i + 1}) ${r}`).join("; ");
+    creditRisk = `The credit risk profile presents a combination of operational strengths and lending concerns that must be assessed together. On the positive side, the business demonstrates ${strengthText}. However, the following credit risk factors have been identified: ${riskList}. These risk factors do not negate the financial strengths above, but they introduce material uncertainty about the consistency and predictability of future cashflow — which is the primary determinant of repayment reliability.`;
+  } else if (riskFactors.length > 0) {
+    const riskList = riskFactors.map((r, i) => `(${i + 1}) ${r}`).join("; ");
+    creditRisk = `The credit risk assessment identifies the following concerns: ${riskList}. These factors collectively indicate elevated uncertainty about the business's ability to generate consistent cashflow for debt repayment. The assessment outcome reflects this risk level.`;
+  } else {
+    creditRisk = `No material credit risk factors have been identified beyond those already reflected in the overall assessment score. The business presents a relatively clean risk profile, with no significant concerns identified around cashflow predictability, revenue dependency, or trend deterioration.`;
   }
 
   // ── Section: Governance Commentary ──────────────────────────────────────
-  const governanceCommentary: string[] = gov?.overrides.map(ov => ov.explanation) ?? [];
+  let governanceCommentary: string[];
+  if (gov?.overridesTriggered && gov.overrides.length > 0) {
+    const strengthNote = isMarginStrong || isMarginOk
+      ? " The Governance Rules Engine does not contradict the financial strengths identified in this assessment. Rather, it acts as a safeguard to prevent automated approval where specific lending risk thresholds remain outside acceptable parameters. The positive financial characteristics identified remain valid and should be presented to a manual underwriter as supporting evidence."
+      : " The governance override reflects that the identified risk factors exceed the thresholds for automated approval, and that a manual underwriting review is required before any lending decision is made.";
+    governanceCommentary = gov.overrides.map(ov => ov.explanation + strengthNote);
+  } else {
+    governanceCommentary = [];
+  }
 
   // ── Section: Executive Summary ───────────────────────────────────────────
   const execParas: string[] = [];
+  const aboveThreshold = sc.totalScore >= passThresh;
+  const netPositive    = cf.netCashflow >= 0;
 
-  const aboveThreshold  = sc.totalScore >= passThresh;
-  const netPositive     = cf.netCashflow >= 0;
-  const netPosLabel     = netPositive ? "positive net cash position" : "negative net cash position";
+  // Para 1: Score and cashflow — reconcile profitability with repayment risk immediately
+  let para1 = `This credit assessment has been completed with an overall score of ${sc.totalScore} out of ${sc.maxScore}` +
+    (aboveThreshold ? "" : `, which falls below the minimum pass threshold of ${passThresh} points`) + `. `;
+  if (netPositive && isMarginStrong) {
+    if (hasHighVolatility || isConsistencyWeak) {
+      para1 += `The business currently generates strong operating cash surpluses${marginPct ? `, with a net margin of ${marginPct}%` : ""}. Although these figures indicate the business is profitable and retains a healthy share of its revenue, the consistency and predictability of this cashflow is a separate and critical consideration for credit assessment. Revenue patterns show significant variability, which limits confidence in the sustained repayment capacity of the business over a lending period.`;
+    } else {
+      para1 += `The business maintains a strong positive cashflow position${marginPct ? `, with a net margin of ${marginPct}% reflecting efficient cash retention relative to total revenue inflows` : ""}. Both current profitability and income predictability support a positive credit assessment.`;
+    }
+  } else if (netPositive && isMarginOk) {
+    para1 += `The business maintains a positive cashflow position${marginPct ? ` with a net margin of ${marginPct}%` : ""}. ${hasHighVolatility ? "While operations are currently profitable, significant cashflow variability has been identified that creates uncertainty about the consistency of future repayments." : "Financial performance is satisfactory, with adequate margins supporting ongoing debt serviceability under normal operating conditions."}`;
+  } else if (!netPositive) {
+    para1 += `The business is operating with a negative net cashflow position, meaning total outflows equal or exceed total inflows. This represents a fundamental constraint on debt serviceability and is the primary driver of the assessment outcome.`;
+  } else {
+    para1 += `The business is operating with constrained margins${marginPct ? ` (net margin: ${marginPct}%)` : ""}, providing limited financial buffer for debt service obligations. This restricts the assessment outcome regardless of other factors.`;
+  }
+  execParas.push(para1);
 
-  execParas.push(
-    `This credit assessment has been completed with an overall score of ${sc.totalScore} out of ${sc.maxScore}` +
-    (aboveThreshold ? "" : `, which falls below the minimum pass threshold of ${passThresh} points`) +
-    `. The business maintains a ${netPosLabel}` +
-    (margin
-      ? `, with a net margin of ${marginPct}%, ` +
-        (margin.marginRatio >= 50 ? "reflecting strong operational efficiency and robust cash retention."
-         : margin.marginRatio >= 25 ? "reflecting satisfactory but moderate operational efficiency."
-         : "indicating constrained financial margins that may limit debt serviceability.")
-      : `, with a net cashflow ratio of ${netRatioPct}% of total inflows.`)
-  );
-
+  // Para 2: Revenue quality and expense structure
   const revClause = !rc
     ? "revenue concentration data is unavailable"
     : rc.risk === "LOW"
-      ? `revenue inflows appear well diversified, with the largest source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts`
+      ? `revenue inflows appear reasonably diversified, with the largest single source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts — presenting no material concentration risk`
       : rc.risk === "MODERATE"
-        ? `revenue concentration is moderate, with the largest inflow source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts`
-        : `revenue concentration is high, with the dominant inflow source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts`;
-
+        ? `revenue concentration is at a moderate level, with the largest inflow source accounting for ${rc.largestInflowPct.toFixed(1)}% of total receipts, introducing some counterparty dependency risk`
+        : `revenue concentration is elevated, with the dominant source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts — a material risk factor for lending decisions`;
   const expClause = !ed
     ? "Expense dependency data is unavailable."
     : ed.risk === "LOW"
-      ? `The expense structure is well-distributed, with the largest outflow at ${ed.largestExpensePct.toFixed(1)}% of total expenditure.`
+      ? `Expenses are distributed across ${ed.outflowCount} categories with no single item exceeding ${ed.largestExpensePct.toFixed(1)}% of total outflows, supporting cost-side resilience.`
       : ed.risk === "MODERATE"
-        ? `The expense base shows moderate concentration, with the largest cost item at ${ed.largestExpensePct.toFixed(1)}% of total expenditure.`
-        : `The expense base is concentrated, with the largest cost item representing ${ed.largestExpensePct.toFixed(1)}% of total expenditure, presenting supply chain or cost-side risk.`;
-
+        ? `The expense base shows moderate concentration, with the largest cost item at ${ed.largestExpensePct.toFixed(1)}% of total outflows, warranting monitoring.`
+        : `Expense concentration is elevated, with the largest cost item representing ${ed.largestExpensePct.toFixed(1)}% of total outflows, creating vulnerability to cost-side disruption.`;
   execParas.push(`From a revenue quality standpoint, ${revClause}. ${expClause}`);
 
+  // Para 3: Stability and trend — the forward-looking repayment picture
   const viClause = !vi || vi.isInsufficientHistory
-    ? "Cashflow volatility could not be assessed due to insufficient history"
+    ? "cashflow volatility could not be assessed due to insufficient history"
     : vi.classification === "LOW"
       ? `cashflow volatility is low (CV: ${vi.cv.toFixed(1)}%), supporting predictable future cash generation`
       : vi.classification === "MODERATE"
         ? `cashflow volatility is moderate (CV: ${vi.cv.toFixed(1)}%), with manageable fluctuations in monthly receipts`
-        : `cashflow volatility is high (CV: ${vi.cv.toFixed(1)}%), raising concerns about repayment predictability`;
-
+        : `cashflow volatility is high (CV: ${vi.cv.toFixed(1)}%), raising material concerns about repayment predictability`;
   const trendClause = !ta || ta.isInsufficientHistory ? ""
-    : ta.classification === "POSITIVE" ? " Performance trends are positive, with improving cashflow indicators over the assessment window."
-    : ta.classification === "STABLE"   ? " No material deterioration or improvement has been detected over the assessment window."
-    : " A deteriorating trend has been identified over the assessment window, which may affect forward-looking repayment capacity.";
-
+    : ta.classification === "POSITIVE"
+      ? " The performance trend is positive, with improving cashflow indicators over the assessment window — a supportive forward-looking finding."
+      : ta.classification === "STABLE"
+        ? " No material deterioration or improvement has been detected over the assessment window."
+        : ` A deteriorating trend has been identified over the assessment window${ta.isSevereDeterioration ? ", characterised as severe" : ""}, which raises concerns about forward-looking repayment capacity.`;
   execParas.push(
-    `In terms of revenue stability, ${viClause}.${trendClause} Income consistency is ${cons.label.toLowerCase()}, as measured across ${cons.monthCount} months of transaction data.`
+    `In terms of revenue stability, ${viClause}.${trendClause} Income consistency is ${cons.label.toLowerCase()}, measured across ${cons.monthCount} month${cons.monthCount !== 1 ? "s" : ""} of transaction data.`
   );
 
+  // Para 4: Governance or outcome statement
   if (gov?.overridesTriggered) {
     const ruleNames = gov.overrides.map(o => o.rule).join("; ");
+    const strengthNote = isMarginStrong || isMarginOk
+      ? " It is important to note that these governance conditions do not invalidate the financial strengths identified in this assessment — the positive cashflow and margin characteristics remain relevant and should be considered by the reviewing underwriter alongside the flagged governance concerns."
+      : "";
     execParas.push(
-      `The automated scoring engine assigned a provisional decision of ${gov.provisionalDecision}. However, the Governance Rules Engine identified ${gov.overrides.length} override condition${gov.overrides.length > 1 ? "s" : ""} (${ruleNames}), resulting in a final decision of ${gov.finalDecision}. Manual underwriter review is required before any lending or funding commitment is made.`
+      `The automated scoring engine assigned a provisional decision of ${gov.provisionalDecision}. The Governance Rules Engine then identified ${gov.overrides.length} override condition${gov.overrides.length > 1 ? "s" : ""} (${ruleNames}), resulting in a final decision of ${gov.finalDecision}. The Governance Rules Engine exists to prevent automated approval where specific lending risk thresholds are not met — it is not an overall financial assessment.${strengthNote} Manual underwriter review is required before any lending or funding commitment is made.`
     );
   } else {
     execParas.push(
       status === "PASS"
-        ? "The business satisfies the automated assessment requirements. No governance overrides were triggered. The application may proceed to credit approval subject to standard due diligence."
+        ? "The business satisfies all automated assessment requirements. No governance overrides were triggered. Both financial performance and revenue stability indicators support the assessment outcome. The application may proceed to credit approval subject to standard due diligence."
         : status === "REVIEW"
-          ? "The assessment outcome requires manual review before a lending or funding decision can be made. The score or data confidence did not meet the threshold for automatic approval."
-          : "The business does not satisfy the minimum automated assessment requirements. A lending or funding decision should not proceed without further financial evidence and manual underwriter assessment."
+          ? "The assessment outcome requires manual review before a lending or funding decision can be made. The score or data confidence did not meet the threshold for automatic approval, and the risk factors identified in this assessment should be reviewed by an underwriter before proceeding."
+          : "The business does not satisfy the minimum automated assessment requirements. A lending or funding decision should not proceed without further financial evidence and a full manual underwriter assessment."
     );
   }
 
   // ── Section: Final Recommendation ────────────────────────────────────────
+  const strengthText = strengthFactors.length > 0
+    ? strengthFactors.length === 1
+      ? strengthFactors[0]
+      : strengthFactors.slice(0, -1).join(", ") + " and " + strengthFactors[strengthFactors.length - 1]
+    : null;
+  const riskText = riskFactors.length > 0
+    ? riskFactors.length === 1
+      ? riskFactors[0]
+      : riskFactors.slice(0, -1).join("; ") + "; and " + riskFactors[riskFactors.length - 1]
+    : null;
+
   let finalRecommendation: string;
   if (status === "PASS") {
-    finalRecommendation = "The business satisfies automated assessment requirements. Subject to standard due diligence, the application may proceed to credit approval.";
+    finalRecommendation = strengthText
+      ? `This business demonstrates ${strengthText}.${riskText ? ` While ${riskText}, these factors remain within acceptable automated assessment thresholds.` : ""} The business satisfies all assessment requirements and may proceed to credit approval, subject to standard due diligence and documentation review.`
+      : "The business satisfies automated assessment requirements. Subject to standard due diligence, the application may proceed to credit approval.";
   } else if (status === "REVIEW") {
-    finalRecommendation = gov?.overridesTriggered
-      ? `The business requires manual review before a lending or funding decision is made. Governance overrides were applied due to: ${gov.overrides.map(o => o.rule).join("; ")}. An underwriter should review the flagged conditions and any additional supporting documentation before proceeding.`
-      : "The business requires manual review before a lending or funding decision is made. The assessment score or data quality did not meet the threshold for automatic approval.";
+    if (strengthText && riskText) {
+      finalRecommendation = `This business demonstrates ${strengthText}. However, ${riskText}. ${hasGovOverride ? `The Governance Rules Engine preserved the positive financial assessment but restricted the final decision because repayment predictability falls outside acceptable automated lending thresholds (${gov!.overrides.map(o => o.rule).join("; ")}). ` : ""}Manual underwriter assessment is recommended before any lending decision, with particular attention to the identified risk factors and any additional supporting documentation.`;
+    } else if (riskText) {
+      finalRecommendation = `The assessment identified the following risk factors that prevent automatic approval: ${riskText}. Manual underwriter assessment is required before any lending or funding decision is made.`;
+    } else {
+      finalRecommendation = hasGovOverride
+        ? `Manual underwriter review is required before a lending or funding decision is made. Governance overrides were applied due to: ${gov!.overrides.map(o => o.rule).join("; ")}. An underwriter should review the flagged conditions and any supporting documentation before proceeding.`
+        : "Manual review is required before a lending or funding decision is made. The assessment score or data quality did not meet the threshold for automatic approval.";
+    }
   } else {
-    finalRecommendation = "The business does not currently satisfy minimum assessment requirements. A lending or funding decision should not proceed without further financial evidence and underwriter assessment.";
+    finalRecommendation = strengthText
+      ? `Although the business demonstrates ${strengthText}, the following critical risk factors prevent automated approval: ${riskText ?? "fundamental assessment thresholds were not met"}. A lending or funding decision should not proceed without further financial evidence, a full manual underwriter assessment, and — where appropriate — additional documentation to address the identified concerns.`
+      : "The business does not currently satisfy minimum assessment requirements. A lending or funding decision should not proceed without further financial evidence and a full manual underwriter assessment.";
   }
 
   return {
@@ -832,6 +960,7 @@ function generateCreditNarrative(
     expenseStructure,
     stability,
     trend,
+    creditRisk,
     governanceCommentary,
     finalRecommendation,
   };
@@ -1096,6 +1225,15 @@ function CreditNarrativeSection({ sc, status }: { sc: ScorecardData; status: "PA
                 sc.trendAnalysis?.classification === "POSITIVE" ? "border-green-200 bg-green-50"
                 : sc.trendAnalysis?.classification === "NEGATIVE" ? "border-red-200 bg-red-50"
                 : undefined
+              }
+            />
+            <NarrativeBlock
+              title="Credit Risk"
+              text={narrative.creditRisk}
+              accent={
+                status === "FAIL" ? "border-red-200 bg-red-50"
+                : status === "REVIEW" ? "border-amber-200 bg-amber-50"
+                : "border-blue-200 bg-blue-50"
               }
             />
           </div>
