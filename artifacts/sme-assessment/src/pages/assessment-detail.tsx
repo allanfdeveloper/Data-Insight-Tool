@@ -12,6 +12,7 @@ import {
   ShieldCheck, ShieldAlert, Info, ArrowUpRight, ArrowDownRight,
   Minus, Zap, Shield, PieChart, Eye, ScrollText,
   Download, FileText, HardDrive, Lock, X, Table2,
+  ClipboardList, Landmark,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -651,6 +652,18 @@ function GovernanceOverridesSection({ gr }: { gr: GovernanceResultData }) {
 
 // ---------- Credit Narrative Generator ----------
 
+interface GovernanceNarrativeItem {
+  rule: string;
+  trigger: string;
+  decisionImpact: string;
+  explanation: string;
+}
+
+interface ReviewArea {
+  title: string;
+  items: string[];
+}
+
 interface CreditNarrative {
   executiveSummary: string[];
   financialStrength: string;
@@ -659,8 +672,12 @@ interface CreditNarrative {
   stability: string;
   trend: string;
   creditRisk: string;
-  governanceCommentary: string[];
+  governanceItems: GovernanceNarrativeItem[];
+  governanceConclusion: string;
   finalRecommendation: string;
+  manualReviewAreas: ReviewArea[];
+  assessmentConclusion: string;
+  showReviewSection: boolean;
 }
 
 function generateCreditNarrative(
@@ -832,93 +849,94 @@ function generateCreditNarrative(
     creditRisk = `No material credit risk factors have been identified beyond those already reflected in the overall assessment score. The business presents a relatively clean risk profile, with no significant concerns identified around cashflow predictability, revenue dependency, or trend deterioration.`;
   }
 
-  // ── Section: Governance Commentary ──────────────────────────────────────
-  let governanceCommentary: string[];
+  // ── Section: Governance Items (structured per-override) ─────────────────
+  const governanceItems: GovernanceNarrativeItem[] = gov?.overridesTriggered && gov.overrides.length > 0
+    ? gov.overrides.map(ov => ({
+        rule: ov.rule,
+        trigger: ov.triggerCondition,
+        decisionImpact: ov.decisionImpact,
+        explanation: ov.explanation,
+      }))
+    : [];
+
+  // ── Section: Governance Conclusion (consolidated) ────────────────────────
+  let governanceConclusion = "";
   if (gov?.overridesTriggered && gov.overrides.length > 0) {
-    const strengthNote = isMarginStrong || isMarginOk
-      ? " The Governance Rules Engine does not contradict the financial strengths identified in this assessment. Rather, it acts as a safeguard to prevent automated approval where specific lending risk thresholds remain outside acceptable parameters. The positive financial characteristics identified remain valid and should be presented to a manual underwriter as supporting evidence."
-      : " The governance override reflects that the identified risk factors exceed the thresholds for automated approval, and that a manual underwriting review is required before any lending decision is made.";
-    governanceCommentary = gov.overrides.map(ov => ov.explanation + strengthNote);
-  } else {
-    governanceCommentary = [];
+    const primaryRiskNames = gov.overrides.map(o => o.rule.replace(/_/g, " ").toLowerCase()).join(" and ");
+    const opNote = isMarginStrong || isMarginOk
+      ? "these governance conditions do not invalidate the financial strengths identified in this assessment — the positive cashflow and operational performance characteristics remain valid and should be considered by the reviewing underwriter as supporting evidence"
+      : "these governance conditions confirm that the identified risk factors exceed the thresholds for automated approval";
+    governanceConclusion = `Collectively, the governance conditions triggered (${primaryRiskNames}) indicate that, while the business may demonstrate positive operational characteristics, the stability and predictability of future cashflows remain outside the platform's acceptable automated lending thresholds. Specifically, ${opNote}. The Governance Rules Engine does not constitute an overall negative financial assessment — it exists to ensure that automated approval is only granted where repayment risk can be assessed with sufficient confidence. Manual credit assessment is therefore required before any lending commitment can be made.`;
   }
 
-  // ── Section: Executive Summary ───────────────────────────────────────────
+  // ── Section: Executive Summary (concise, integrated credit story) ────────
   const execParas: string[] = [];
-  const aboveThreshold = sc.totalScore >= passThresh;
-  const netPositive    = cf.netCashflow >= 0;
+  const netPositive = cf.netCashflow >= 0;
 
-  // Para 1: Score and cashflow — reconcile profitability with repayment risk immediately
-  let para1 = `This credit assessment has been completed with an overall score of ${sc.totalScore} out of ${sc.maxScore}` +
-    (aboveThreshold ? "" : `, which falls below the minimum pass threshold of ${passThresh} points`) + `. `;
-  if (netPositive && isMarginStrong) {
-    if (hasHighVolatility || isConsistencyWeak) {
-      para1 += `The business currently generates strong operating cash surpluses${marginPct ? `, with a net margin of ${marginPct}%` : ""}. Although these figures indicate the business is profitable and retains a healthy share of its revenue, the consistency and predictability of this cashflow is a separate and critical consideration for credit assessment. Revenue patterns show significant variability, which limits confidence in the sustained repayment capacity of the business over a lending period.`;
-    } else {
-      para1 += `The business maintains a strong positive cashflow position${marginPct ? `, with a net margin of ${marginPct}% reflecting efficient cash retention relative to total revenue inflows` : ""}. Both current profitability and income predictability support a positive credit assessment.`;
-    }
-  } else if (netPositive && isMarginOk) {
-    para1 += `The business maintains a positive cashflow position${marginPct ? ` with a net margin of ${marginPct}%` : ""}. ${hasHighVolatility ? "While operations are currently profitable, significant cashflow variability has been identified that creates uncertainty about the consistency of future repayments." : "Financial performance is satisfactory, with adequate margins supporting ongoing debt serviceability under normal operating conditions."}`;
+  // Single leading paragraph: operational performance → credit risk → decision → reason
+  let opStatement: string;
+  if (isMarginStrong) {
+    opStatement = `The business demonstrates strong operating profitability${marginPct ? `, with a net margin of ${marginPct}%` : ""}, retaining a substantial share of revenue after meeting all operational expenses`;
+  } else if (isMarginOk) {
+    opStatement = `The business maintains a positive operating surplus${marginPct ? ` with a net margin of ${marginPct}%` : ""}, indicating satisfactory financial performance under current operating conditions`;
   } else if (!netPositive) {
-    para1 += `The business is operating with a negative net cashflow position, meaning total outflows equal or exceed total inflows. This represents a fundamental constraint on debt serviceability and is the primary driver of the assessment outcome.`;
+    opStatement = `The business is operating with a negative net cashflow position, with total outflows equalling or exceeding total inflows`;
   } else {
-    para1 += `The business is operating with constrained margins${marginPct ? ` (net margin: ${marginPct}%)` : ""}, providing limited financial buffer for debt service obligations. This restricts the assessment outcome regardless of other factors.`;
+    opStatement = `The business is generating positive cashflow but with constrained margins${marginPct ? ` (net margin: ${marginPct}%)` : ""}, providing limited financial buffer for debt service obligations`;
   }
-  execParas.push(para1);
 
-  // Para 2: Revenue quality and expense structure
-  const revClause = !rc
-    ? "revenue concentration data is unavailable"
-    : rc.risk === "LOW"
-      ? `revenue inflows appear reasonably diversified, with the largest single source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts — presenting no material concentration risk`
-      : rc.risk === "MODERATE"
-        ? `revenue concentration is at a moderate level, with the largest inflow source accounting for ${rc.largestInflowPct.toFixed(1)}% of total receipts, introducing some counterparty dependency risk`
-        : `revenue concentration is elevated, with the dominant source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts — a material risk factor for lending decisions`;
-  const expClause = !ed
-    ? "Expense dependency data is unavailable."
-    : ed.risk === "LOW"
-      ? `Expenses are distributed across ${ed.outflowCount} categories with no single item exceeding ${ed.largestExpensePct.toFixed(1)}% of total outflows, supporting cost-side resilience.`
-      : ed.risk === "MODERATE"
-        ? `The expense base shows moderate concentration, with the largest cost item at ${ed.largestExpensePct.toFixed(1)}% of total outflows, warranting monitoring.`
-        : `Expense concentration is elevated, with the largest cost item representing ${ed.largestExpensePct.toFixed(1)}% of total outflows, creating vulnerability to cost-side disruption.`;
-  execParas.push(`From a revenue quality standpoint, ${revClause}. ${expClause}`);
+  const primaryRisksExec: string[] = [];
+  if (hasHighVolatility) primaryRisksExec.push(`elevated revenue volatility (CV: ${vi!.cv.toFixed(1)}%)`);
+  else if (hasModVolatility) primaryRisksExec.push("moderate revenue volatility");
+  if (isConsistencyWeak || (cons.irregularityFlags && cons.irregularityFlags.length > 0))
+    primaryRisksExec.push("irregular income patterns");
+  if (hasTrendDeterior) primaryRisksExec.push(`a${ta?.isSevereDeterioration ? " severe" : ""} deteriorating performance trend`);
+  if (rc && rc.risk === "HIGH") primaryRisksExec.push(`elevated revenue concentration (${rc.largestInflowPct.toFixed(1)}% from a single source)`);
+  if (margin && margin.classification === "Thin") primaryRisksExec.push("thin operational margins");
+  if (ed && ed.risk === "HIGH") primaryRisksExec.push("high expense dependency");
+  if (!netPositive) primaryRisksExec.push("a negative net cashflow position");
 
-  // Para 3: Stability and trend — the forward-looking repayment picture
-  const viClause = !vi || vi.isInsufficientHistory
-    ? "cashflow volatility could not be assessed due to insufficient history"
-    : vi.classification === "LOW"
-      ? `cashflow volatility is low (CV: ${vi.cv.toFixed(1)}%), supporting predictable future cash generation`
-      : vi.classification === "MODERATE"
-        ? `cashflow volatility is moderate (CV: ${vi.cv.toFixed(1)}%), with manageable fluctuations in monthly receipts`
-        : `cashflow volatility is high (CV: ${vi.cv.toFixed(1)}%), raising material concerns about repayment predictability`;
-  const trendClause = !ta || ta.isInsufficientHistory ? ""
-    : ta.classification === "POSITIVE"
-      ? " The performance trend is positive, with improving cashflow indicators over the assessment window — a supportive forward-looking finding."
-      : ta.classification === "STABLE"
-        ? " No material deterioration or improvement has been detected over the assessment window."
-        : ` A deteriorating trend has been identified over the assessment window${ta.isSevereDeterioration ? ", characterised as severe" : ""}, which raises concerns about forward-looking repayment capacity.`;
+  let riskStatement: string;
+  if (primaryRisksExec.length === 0) {
+    riskStatement = "No material credit risk factors have been identified that would reduce confidence in future repayment capacity.";
+  } else if (primaryRisksExec.length === 1) {
+    riskStatement = `However, ${primaryRisksExec[0]} materially reduces confidence in future repayment consistency.`;
+  } else {
+    const listed = primaryRisksExec.slice(0, -1).join(", ") + " and " + primaryRisksExec[primaryRisksExec.length - 1];
+    riskStatement = `However, ${listed} collectively reduce confidence in future repayment consistency.`;
+  }
+
+  let decisionStatement: string;
+  if (status === "PASS") {
+    decisionStatement = `The business satisfies the platform's automated lending thresholds with a score of ${sc.totalScore}/${sc.maxScore} and is assessed as suitable to proceed to credit approval.`;
+  } else if (status === "REVIEW") {
+    if (hasGovOverride) {
+      decisionStatement = `Although financially ${isMarginStrong || isMarginOk ? "sound from an operational perspective" : "generating positive cashflow"}, the business does not currently satisfy the platform's automated lending thresholds. The Governance Rules Engine identified elevated lending risk conditions and assigned a final decision of REVIEW — manual credit assessment is required before any lending commitment can be made.`;
+    } else {
+      decisionStatement = `Although ${isMarginStrong ? "operationally profitable" : "generating positive cashflow"}, the business does not currently satisfy the platform's automated lending thresholds (score: ${sc.totalScore}/${sc.maxScore}; pass threshold: ${passThresh}) and therefore requires manual credit review before any lending decision is made.`;
+    }
+  } else {
+    decisionStatement = !netPositive
+      ? `The negative cashflow position represents a hard constraint that automatically disqualifies the business from automated approval at this time. A lending decision should not be made without further financial evidence and full manual assessment.`
+      : `The business does not satisfy the platform's minimum creditworthiness requirements (score: ${sc.totalScore}/${sc.maxScore}) and is not currently suitable for a positive lending decision.`;
+  }
+
+  execParas.push(`${opStatement}. ${riskStatement} ${decisionStatement}`);
+
+  // Supporting paragraph: score, consistency, trend, confidence
+  const trendSummary = ta && !ta.isInsufficientHistory
+    ? ta.classification === "POSITIVE"
+      ? " The performance trend is positive over the assessment window."
+      : ta.classification === "NEGATIVE"
+        ? ` A${ta.isSevereDeterioration ? " severe" : ""} deteriorating trend has been identified over the assessment window.`
+        : ""
+    : "";
+  const confidenceSuffix = sc.confidence !== "HIGH"
+    ? ` Assessment confidence is ${sc.confidence}${sc.confidenceReasons && sc.confidenceReasons.length > 0 ? " — " + sc.confidenceReasons[0] : ""}.`
+    : "";
   execParas.push(
-    `In terms of revenue stability, ${viClause}.${trendClause} Income consistency is ${cons.label.toLowerCase()}, measured across ${cons.monthCount} month${cons.monthCount !== 1 ? "s" : ""} of transaction data.`
+    `Assessment score: ${sc.totalScore}/${sc.maxScore} (pass threshold: ${passThresh}). Income consistency is ${cons.label.toLowerCase()}, measured across ${cons.monthCount} month${cons.monthCount !== 1 ? "s" : ""} of transaction data.${trendSummary}${confidenceSuffix}`
   );
-
-  // Para 4: Governance or outcome statement
-  if (gov?.overridesTriggered) {
-    const ruleNames = gov.overrides.map(o => o.rule).join("; ");
-    const strengthNote = isMarginStrong || isMarginOk
-      ? " It is important to note that these governance conditions do not invalidate the financial strengths identified in this assessment — the positive cashflow and margin characteristics remain relevant and should be considered by the reviewing underwriter alongside the flagged governance concerns."
-      : "";
-    execParas.push(
-      `The automated scoring engine assigned a provisional decision of ${gov.provisionalDecision}. The Governance Rules Engine then identified ${gov.overrides.length} override condition${gov.overrides.length > 1 ? "s" : ""} (${ruleNames}), resulting in a final decision of ${gov.finalDecision}. The Governance Rules Engine exists to prevent automated approval where specific lending risk thresholds are not met — it is not an overall financial assessment.${strengthNote} Manual underwriter review is required before any lending or funding commitment is made.`
-    );
-  } else {
-    execParas.push(
-      status === "PASS"
-        ? "The business satisfies all automated assessment requirements. No governance overrides were triggered. Both financial performance and revenue stability indicators support the assessment outcome. The application may proceed to credit approval subject to standard due diligence."
-        : status === "REVIEW"
-          ? "The assessment outcome requires manual review before a lending or funding decision can be made. The score or data confidence did not meet the threshold for automatic approval, and the risk factors identified in this assessment should be reviewed by an underwriter before proceeding."
-          : "The business does not satisfy the minimum automated assessment requirements. A lending or funding decision should not proceed without further financial evidence and a full manual underwriter assessment."
-    );
-  }
 
   // ── Section: Final Recommendation ────────────────────────────────────────
   const strengthText = strengthFactors.length > 0
@@ -938,20 +956,178 @@ function generateCreditNarrative(
       ? `This business demonstrates ${strengthText}.${riskText ? ` While ${riskText}, these factors remain within acceptable automated assessment thresholds.` : ""} The business satisfies all assessment requirements and may proceed to credit approval, subject to standard due diligence and documentation review.`
       : "The business satisfies automated assessment requirements. Subject to standard due diligence, the application may proceed to credit approval.";
   } else if (status === "REVIEW") {
-    if (strengthText && riskText) {
-      finalRecommendation = `This business demonstrates ${strengthText}. However, ${riskText}. ${hasGovOverride ? `The Governance Rules Engine preserved the positive financial assessment but restricted the final decision because repayment predictability falls outside acceptable automated lending thresholds (${gov!.overrides.map(o => o.rule).join("; ")}). ` : ""}Manual underwriter assessment is recommended before any lending decision, with particular attention to the identified risk factors and any additional supporting documentation.`;
-    } else if (riskText) {
-      finalRecommendation = `The assessment identified the following risk factors that prevent automatic approval: ${riskText}. Manual underwriter assessment is required before any lending or funding decision is made.`;
-    } else {
-      finalRecommendation = hasGovOverride
-        ? `Manual underwriter review is required before a lending or funding decision is made. Governance overrides were applied due to: ${gov!.overrides.map(o => o.rule).join("; ")}. An underwriter should review the flagged conditions and any supporting documentation before proceeding.`
-        : "Manual review is required before a lending or funding decision is made. The assessment score or data quality did not meet the threshold for automatic approval.";
-    }
+    finalRecommendation = strengthText && riskText
+      ? `This business demonstrates ${strengthText}. However, ${riskText}. ${hasGovOverride ? "The Governance Rules Engine preserved the positive financial assessment but restricted the final decision because repayment predictability falls outside acceptable automated lending thresholds. " : ""}Manual underwriter assessment is recommended before any lending decision, with particular attention to the risk factors identified in this report.`
+      : riskText
+        ? `The assessment identified the following risk factors that prevent automatic approval: ${riskText}. Manual underwriter assessment is required before any lending or funding decision is made.`
+        : hasGovOverride
+          ? `Manual underwriter review is required before a lending or funding decision is made. Governance overrides were applied — an underwriter should review the flagged conditions and any supporting documentation before proceeding.`
+          : "Manual review is required. The assessment score or data quality did not meet the threshold for automatic approval.";
   } else {
     finalRecommendation = strengthText
-      ? `Although the business demonstrates ${strengthText}, the following critical risk factors prevent automated approval: ${riskText ?? "fundamental assessment thresholds were not met"}. A lending or funding decision should not proceed without further financial evidence, a full manual underwriter assessment, and — where appropriate — additional documentation to address the identified concerns.`
+      ? `Although the business demonstrates ${strengthText}, the following critical risk factors prevent automated approval: ${riskText ?? "fundamental assessment thresholds were not met"}. A lending decision should not proceed without further financial evidence, a full manual underwriter assessment, and additional documentation addressing the identified concerns.`
       : "The business does not currently satisfy minimum assessment requirements. A lending or funding decision should not proceed without further financial evidence and a full manual underwriter assessment.";
   }
+
+  // ── Section: Manual Review Areas (dynamic, evidence-based) ───────────────
+  const showReviewSection = status === "REVIEW" || hasGovOverride;
+  const manualReviewAreas: ReviewArea[] = [];
+
+  if (showReviewSection) {
+    if (hasHighVolatility || hasModVolatility) {
+      manualReviewAreas.push({
+        title: "Revenue Volatility",
+        items: [
+          `Determine whether the identified revenue volatility (CV: ${vi!.cv.toFixed(1)}%) is seasonal in nature or reflects a structural characteristic of the business model.`,
+          "Request at least 12 months of bank statements to assess the full revenue cycle and identify any seasonal patterns.",
+          "Obtain management commentary on the key drivers of month-to-month revenue variation.",
+          "Request future revenue projections and the assumptions underpinning them.",
+          ...(hasHighVolatility ? ["Consider whether a variable repayment structure aligned to cashflow cycles would be more appropriate than a fixed monthly instalment."] : []),
+        ],
+      });
+    }
+
+    if (isConsistencyWeak || (cons.irregularityFlags && cons.irregularityFlags.length > 0)) {
+      manualReviewAreas.push({
+        title: "Income Irregularity",
+        items: [
+          "Verify the existence and terms of recurring customer contracts or scheduled payment agreements.",
+          "Confirm the forward revenue pipeline, including contracted and prospective revenue.",
+          "Assess the payment behaviour and reliability of the business's key customers.",
+          "Request a debtor aging analysis to evaluate the quality and timeliness of receivables.",
+          ...(cons.irregularityFlags && cons.irregularityFlags.length > 0
+            ? [`Review the following flagged income irregularities with management: ${cons.irregularityFlags.join("; ")}.`]
+            : []),
+        ],
+      });
+    }
+
+    if (hasTrendDeterior) {
+      manualReviewAreas.push({
+        title: ta?.isSevereDeterioration ? "Severe Performance Deterioration" : "Deteriorating Performance Trend",
+        items: [
+          "Request a management explanation for the identified decline in revenue and/or net cashflow.",
+          "Investigate whether the deterioration reflects a temporary disruption or a structural business challenge.",
+          "If applicable, review the business's turnaround strategy, including timeline and key milestones.",
+          "Assess whether the business has sufficient working capital to sustain operations during the review period.",
+          ...(ta?.isSevereDeterioration
+            ? ["Given the severity of the deterioration, management accounts and forward cashflow projections should be treated as mandatory supporting documents."]
+            : []),
+        ],
+      });
+    }
+
+    if (rc && rc.risk === "HIGH") {
+      manualReviewAreas.push({
+        title: "Revenue Concentration",
+        items: [
+          `Verify the nature and contractual basis of the relationship with the dominant revenue source (${rc.largestInflowPct.toFixed(1)}% of total receipts).`,
+          "Assess the stability, tenure, and contractual security of the key customer or revenue counterparty.",
+          "Request evidence of customer diversification activity or a pipeline of alternative revenue sources.",
+          "Evaluate the likely impact on monthly cashflow should the dominant revenue source reduce or cease.",
+        ],
+      });
+    } else if (rc && rc.risk === "MODERATE") {
+      manualReviewAreas.push({
+        title: "Revenue Concentration",
+        items: [
+          `Monitor the dependency on the largest inflow source (${rc.largestInflowPct.toFixed(1)}% of total receipts).`,
+          "Confirm whether the business has active plans to broaden its customer base.",
+          "Request confirmation of the contractual relationship with the top revenue counterparties.",
+        ],
+      });
+    }
+
+    if (ed && ed.risk === "HIGH") {
+      manualReviewAreas.push({
+        title: "Expense Dependency",
+        items: [
+          `Assess the business's dependency on its largest supplier or cost category (${ed.largestExpensePct.toFixed(1)}% of total outflows).`,
+          "Request details of alternative supplier arrangements or documented contingency plans.",
+          "Evaluate the operational and cashflow impact should the dominant expense counterparty be disrupted or repriced.",
+        ],
+      });
+    }
+
+    if (!netPositive) {
+      manualReviewAreas.push({
+        title: "Negative Cashflow Position",
+        items: [
+          "Obtain a detailed management explanation for why outflows are meeting or exceeding inflows.",
+          "Review the business's current liquidity position and any available credit facilities.",
+          "Assess the working capital position and any upcoming significant payment obligations.",
+          "Request a cashflow forecast demonstrating the business's path to a sustainable positive cashflow position.",
+        ],
+      });
+    }
+
+    if (sc.confidence === "LOW" || sc.confidence === "MEDIUM") {
+      manualReviewAreas.push({
+        title: "Data Sufficiency",
+        items: [
+          `Only ${cons.monthCount} month${cons.monthCount !== 1 ? "s" : ""} of transaction data was assessed — request additional bank statements to improve the reliability of this assessment.`,
+          sc.confidence === "LOW"
+            ? "A minimum of 6 months of bank statements is recommended to enable a comprehensive credit assessment."
+            : "Where possible, extend the assessment period to cover at least 6 months of trading activity.",
+          "Consider whether the limited data window accurately represents the business's typical trading activity and whether the period assessed was atypical.",
+        ],
+      });
+    }
+  }
+
+  // ── Section: Assessment Conclusion ───────────────────────────────────────
+  const opStrengthLabel = isMarginStrong
+    ? `strong operating profitability${marginPct ? ` (net margin: ${marginPct}%)` : ""} and healthy cash generation`
+    : isMarginOk
+      ? `a positive operating surplus${marginPct ? ` (net margin: ${marginPct}%)` : ""} with satisfactory financial performance`
+      : `limited operational profitability${marginPct ? ` (net margin: ${marginPct}%)` : ""}`;
+
+  const opWeaknesses: string[] = [];
+  if (margin && margin.classification === "Thin") opWeaknesses.push("thin operational margins");
+  if (rc && rc.risk === "HIGH") opWeaknesses.push("high revenue concentration");
+  else if (rc && rc.risk === "MODERATE") opWeaknesses.push("moderate revenue concentration");
+  if (ed && ed.risk === "HIGH") opWeaknesses.push("elevated expense dependency");
+
+  const creditRisksConclusion: string[] = [];
+  if (hasHighVolatility) creditRisksConclusion.push("elevated revenue volatility");
+  else if (hasModVolatility) creditRisksConclusion.push("moderate cashflow volatility");
+  if (isConsistencyWeak) creditRisksConclusion.push("irregular income patterns");
+  if (hasTrendDeterior) creditRisksConclusion.push(`a${ta?.isSevereDeterioration ? " severe" : ""} deteriorating performance trend`);
+  if (!netPositive) creditRisksConclusion.push("a negative cashflow position");
+
+  let conclusionDecisionReason: string;
+  if (status === "PASS") {
+    conclusionDecisionReason = "The business satisfies all automated assessment criteria. No material credit risks were identified that would prevent approval.";
+  } else if (status === "REVIEW") {
+    conclusionDecisionReason = hasGovOverride
+      ? `The Governance Rules Engine identified conditions that prevent automated approval (${gov!.overrides.map(o => o.rule).join("; ")}). While the operational financial position is ${isMarginStrong || isMarginOk ? "sound" : "acceptable"}, the stability and predictability of future cashflows remain outside acceptable automated lending thresholds.`
+      : `The assessment score of ${sc.totalScore}/${sc.maxScore} does not meet the automated pass threshold of ${passThresh}. The identified risk factors reduce confidence in consistent future repayment capacity.`;
+  } else {
+    conclusionDecisionReason = !netPositive
+      ? "The negative cashflow position represents a hard constraint that disqualifies the business from automated approval at this time."
+      : `The assessment score of ${sc.totalScore}/${sc.maxScore} falls below the minimum review threshold. The identified risk profile does not support a positive lending recommendation.`;
+  }
+
+  let conclusionNextAction: string;
+  if (status === "PASS") {
+    conclusionNextAction = "Subject to satisfactory completion of standard due diligence and documentation, the application may proceed to credit approval.";
+  } else if (status === "REVIEW") {
+    const topAreas = manualReviewAreas.slice(0, 2).map(a => a.title.toLowerCase());
+    conclusionNextAction = topAreas.length > 0
+      ? `Subject to satisfactory clarification of the identified risks during manual underwriter review — particularly regarding ${topAreas.join(" and ")} — the business may still represent an acceptable lending opportunity.`
+      : "Subject to satisfactory clarification of the identified risk factors during manual underwriter review, the business may still represent an acceptable lending opportunity.";
+  } else {
+    conclusionNextAction = "A lending decision should not proceed without further financial evidence, a complete manual underwriter assessment, and — where applicable — demonstrable improvement in the business's financial position.";
+  }
+
+  const weaknessClause = opWeaknesses.length > 0
+    ? ` Operational weaknesses identified include ${opWeaknesses.join(", ")}.`
+    : "";
+  const riskClause = creditRisksConclusion.length > 0
+    ? ` From a credit risk perspective, ${creditRisksConclusion.length === 1 ? creditRisksConclusion[0] : creditRisksConclusion.slice(0, -1).join(", ") + " and " + creditRisksConclusion[creditRisksConclusion.length - 1]} reduce${creditRisksConclusion.length === 1 ? "s" : ""} confidence in consistent future repayment capacity.`
+    : " No material credit risk factors were identified.";
+
+  const assessmentConclusion = `The assessment identified a business with ${opStrengthLabel}.${weaknessClause}${riskClause} ${conclusionDecisionReason} ${conclusionNextAction}`;
 
   return {
     executiveSummary: execParas,
@@ -961,8 +1137,12 @@ function generateCreditNarrative(
     stability,
     trend,
     creditRisk,
-    governanceCommentary,
+    governanceItems,
+    governanceConclusion,
     finalRecommendation,
+    manualReviewAreas,
+    assessmentConclusion,
+    showReviewSection,
   };
 }
 
@@ -1172,8 +1352,7 @@ function StatementSection({ assessmentId }: { assessmentId: number }) {
 
 function CreditNarrativeSection({ sc, status }: { sc: ScorecardData; status: "PASS" | "REVIEW" | "FAIL" }) {
   const narrative = generateCreditNarrative(sc, status);
-  const gov = sc.governanceResult;
-  const isGovOverride = !!(gov?.overridesTriggered);
+  const isGovOverride = narrative.governanceItems.length > 0;
 
   const recBorderClass = status === "PASS"
     ? "border-green-200 bg-green-50"
@@ -1184,6 +1363,16 @@ function CreditNarrativeSection({ sc, status }: { sc: ScorecardData; status: "PA
   const recTextClass = status === "PASS" ? "text-green-800"
     : status === "REVIEW" ? "text-amber-800"
     : "text-red-800";
+
+  const conclusionBorderClass = status === "PASS"
+    ? "border-green-300 bg-green-50"
+    : status === "REVIEW"
+      ? "border-blue-200 bg-blue-50"
+      : "border-red-200 bg-red-50";
+
+  const conclusionTextClass = status === "PASS" ? "text-green-900"
+    : status === "REVIEW" ? "text-blue-900"
+    : "text-red-900";
 
   return (
     <div className="bg-card border border-card-border rounded-xl mb-6">
@@ -1198,19 +1387,20 @@ function CreditNarrativeSection({ sc, status }: { sc: ScorecardData; status: "PA
       </div>
 
       <div className="px-5 py-5 space-y-6">
-        {/* Executive Summary */}
+
+        {/* 1. Executive Summary */}
         <div>
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Executive Summary</p>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {narrative.executiveSummary.map((para, i) => (
-              <p key={i} className="text-sm text-foreground leading-relaxed">{para}</p>
+              <p key={i} className={`leading-relaxed ${i === 0 ? "text-sm text-foreground font-medium" : "text-xs text-muted-foreground"}`}>{para}</p>
             ))}
           </div>
         </div>
 
         <div className="border-t border-card-border" />
 
-        {/* Commentary grid */}
+        {/* 2. Detailed Commentary */}
         <div>
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Detailed Commentary</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1239,8 +1429,8 @@ function CreditNarrativeSection({ sc, status }: { sc: ScorecardData; status: "PA
           </div>
         </div>
 
-        {/* Governance Commentary */}
-        {isGovOverride && narrative.governanceCommentary.length > 0 && (
+        {/* 3. Governance Commentary (structured per override + consolidated conclusion) */}
+        {isGovOverride && (
           <>
             <div className="border-t border-card-border" />
             <div>
@@ -1249,11 +1439,30 @@ function CreditNarrativeSection({ sc, status }: { sc: ScorecardData; status: "PA
                 Governance Commentary
               </p>
               <div className="space-y-3">
-                {narrative.governanceCommentary.map((para, i) => (
-                  <div key={i} className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                    <p className="text-xs text-amber-900 leading-relaxed">{para}</p>
+                {narrative.governanceItems.map((item, i) => (
+                  <div key={i} className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+                    <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wide">
+                      {item.rule.replace(/_/g, " ")}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                      <div>
+                        <span className="font-semibold text-amber-800">Trigger: </span>
+                        <span className="text-amber-900">{item.trigger}</span>
+                      </div>
+                      <div>
+                        <span className="font-semibold text-amber-800">Decision impact: </span>
+                        <span className="text-amber-900">{item.decisionImpact}</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-amber-900 leading-relaxed">{item.explanation}</p>
                   </div>
                 ))}
+                {narrative.governanceConclusion && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-100 px-4 py-3">
+                    <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wide mb-1.5">Governance Conclusion</p>
+                    <p className="text-xs text-amber-900 leading-relaxed">{narrative.governanceConclusion}</p>
+                  </div>
+                )}
               </div>
             </div>
           </>
@@ -1261,13 +1470,56 @@ function CreditNarrativeSection({ sc, status }: { sc: ScorecardData; status: "PA
 
         <div className="border-t border-card-border" />
 
-        {/* Final Recommendation */}
+        {/* 4. Final Recommendation */}
         <div>
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Final Recommendation</p>
           <div className={`rounded-lg border px-4 py-3 ${recBorderClass}`}>
             <p className={`text-sm font-medium leading-relaxed ${recTextClass}`}>{narrative.finalRecommendation}</p>
           </div>
         </div>
+
+        {/* 5. Recommended Manual Review Areas (REVIEW or gov override only) */}
+        {narrative.showReviewSection && narrative.manualReviewAreas.length > 0 && (
+          <>
+            <div className="border-t border-card-border" />
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <ClipboardList className="h-3 w-3 text-muted-foreground" />
+                Recommended Manual Review Areas
+              </p>
+              <div className="space-y-3">
+                {narrative.manualReviewAreas.map((area, i) => (
+                  <div key={i} className="rounded-lg border border-border bg-muted/10 px-4 py-3">
+                    <p className="text-[10px] font-bold text-foreground uppercase tracking-wide mb-2">{area.title}</p>
+                    <ul className="space-y-1.5">
+                      {area.items.map((item, j) => (
+                        <li key={j} className="text-xs text-foreground leading-relaxed flex gap-2">
+                          <span className="text-muted-foreground mt-0.5 shrink-0">•</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* 6. Assessment Conclusion */}
+        <>
+          <div className="border-t border-card-border" />
+          <div>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Landmark className="h-3 w-3 text-muted-foreground" />
+              Assessment Conclusion
+            </p>
+            <div className={`rounded-lg border px-4 py-4 ${conclusionBorderClass}`}>
+              <p className={`text-sm leading-relaxed ${conclusionTextClass}`}>{narrative.assessmentConclusion}</p>
+            </div>
+          </div>
+        </>
+
       </div>
     </div>
   );
