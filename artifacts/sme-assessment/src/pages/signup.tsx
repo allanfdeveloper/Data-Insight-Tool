@@ -58,13 +58,13 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center mb-10">
+        <div className="flex flex-col items-center text-center mb-10">
           <div className="h-14 w-14 rounded-xl bg-primary flex items-center justify-center mb-5">
             <Building className="h-7 w-7 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">SME Credit Intelligence Platform</h1>
-          <p className="text-sm text-muted-foreground/80 mt-2 italic">Alternative Data Credit Assessment</p>
-          <p className="text-[11px] text-muted-foreground/50 mt-1.5 tracking-wide">Version 1.0 (MVP)</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight leading-snug">SME Credit Intelligence Platform</h1>
+          <p className="text-sm text-muted-foreground/75 mt-2.5 italic">Explainable Alternative Data Credit Assessment</p>
+          <p className="text-[11px] text-muted-foreground/60 mt-1.5 tracking-wide">Version 1.0 (MVP)</p>
         </div>
 
         <div className="bg-card border border-card-border rounded-xl p-6 shadow-sm">
