@@ -113,8 +113,12 @@ export default function LoginPage() {
         <p className="text-center text-sm text-muted-foreground mt-4">
           Don't have an account?{" "}
           <Link href="/signup" className="text-accent hover:underline font-medium">
-            Create one
+            Register Organisation
           </Link>
+        </p>
+
+        <p className="text-center text-[11px] text-muted-foreground/40 mt-6 tracking-wide">
+          © 2026 SME Credit Intelligence Platform
         </p>
       </div>
     </div>
