@@ -58,18 +58,17 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center text-center mb-10">
-          <div className="h-14 w-14 rounded-xl bg-primary flex items-center justify-center mb-5">
+        <div className="flex flex-col items-center text-center mb-8">
+          <div className="h-14 w-14 rounded-xl bg-primary flex items-center justify-center mb-4">
             <Building className="h-7 w-7 text-primary-foreground" />
           </div>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight leading-snug">SME Credit Intelligence Platform</h1>
-          <p className="text-sm text-muted-foreground/75 mt-2.5 italic">Explainable Alternative Data Credit Assessment</p>
-          <p className="text-[11px] text-muted-foreground/60 mt-1.5 tracking-wide">Version 1.0 (MVP)</p>
+          <p className="text-sm text-muted-foreground/75 mt-2 italic">Explainable Alternative Data Credit Assessment</p>
         </div>
 
         <div className="bg-card border border-card-border rounded-xl p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-foreground mb-1">Create account</h2>
-          <p className="text-sm text-muted-foreground mb-6">Join the assessment platform</p>
+          <h2 className="text-lg font-semibold text-foreground mb-1">Register Organisation</h2>
+          <p className="text-sm text-muted-foreground mb-6">Register to access the SME Credit Intelligence Platform.</p>
 
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
@@ -77,7 +76,7 @@ export default function SignupPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="analyst@company.com"
+                placeholder="Enter your email address"
                 data-testid="input-email"
                 {...form.register("email")}
               />
@@ -128,7 +127,7 @@ export default function SignupPage() {
                   Creating account...
                 </>
               ) : (
-                "Create account"
+                "Register Organisation"
               )}
             </Button>
           </form>
@@ -140,6 +139,11 @@ export default function SignupPage() {
             Sign in
           </Link>
         </p>
+
+        <div className="text-center mt-6 space-y-0.5">
+          <p className="text-[11px] text-muted-foreground/70 tracking-wide font-medium">© 2026 SME Credit Intelligence Platform</p>
+          <p className="text-[11px] text-muted-foreground/55 tracking-wide">Version 1.0 (MVP)</p>
+        </div>
       </div>
     </div>
   );
