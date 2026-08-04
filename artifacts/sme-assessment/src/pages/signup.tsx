@@ -68,7 +68,7 @@ export default function SignupPage() {
 
         <div className="bg-card border border-card-border rounded-xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-foreground mb-1">Register Organisation</h2>
-          <p className="text-sm text-muted-foreground mb-6">Register to access the SME Credit Intelligence Platform.</p>
+          <p className="text-sm text-muted-foreground mb-6">Register to get started.</p>
 
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
