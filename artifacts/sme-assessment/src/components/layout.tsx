@@ -49,7 +49,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="h-8 w-8 rounded-md bg-accent flex items-center justify-center">
             <Building className="h-5 w-5 text-accent-foreground" />
           </div>
-          <span className="font-semibold text-lg tracking-tight">SME Assess</span>
+          <span className="font-semibold text-lg tracking-tight">SME Credit Intelligence Platform</span>
         </div>
         
         <div className="p-4 flex-1">

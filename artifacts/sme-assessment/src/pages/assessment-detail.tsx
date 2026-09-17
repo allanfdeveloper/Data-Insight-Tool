@@ -934,8 +934,20 @@ function generateCreditNarrative(
   const confidenceSuffix = sc.confidence !== "HIGH"
     ? ` Assessment confidence is ${sc.confidence}${sc.confidenceReasons && sc.confidenceReasons.length > 0 ? " — " + sc.confidenceReasons[0] : ""}.`
     : "";
+  const consistencyNarrative = cons.monthCount < 2 || cons.cv === null
+    ? "Income consistency could not be assessed reliably"
+    : cons.normalizedScore >= 85
+      ? "The business demonstrates a highly consistent revenue pattern"
+      : cons.normalizedScore >= 65
+        ? "Revenue patterns are consistent"
+        : cons.normalizedScore >= 45
+          ? "Revenue patterns show moderate consistency"
+          : cons.normalizedScore >= 20
+            ? "Revenue patterns are irregular"
+            : "Revenue patterns show significant variability";
+
   execParas.push(
-    `Assessment score: ${sc.totalScore}/${sc.maxScore} (pass threshold: ${passThresh}). Income consistency is ${cons.label.toLowerCase()}, measured across ${cons.monthCount} month${cons.monthCount !== 1 ? "s" : ""} of transaction data.${trendSummary}${confidenceSuffix}`
+    `Assessment score: ${sc.totalScore}/${sc.maxScore} (pass threshold: ${passThresh}). ${consistencyNarrative}, measured across ${cons.monthCount} month${cons.monthCount !== 1 ? "s" : ""} of transaction data.${trendSummary}${confidenceSuffix}`
   );
 
   // ── Section: Final Recommendation ────────────────────────────────────────

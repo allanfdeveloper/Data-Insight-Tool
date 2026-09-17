@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "SME Alternative Data Assessment"
+title = "SME Credit Intelligence Platform"
 version = "1.0.0"
 id = "artifacts/sme-assessment"
 router = "path"
