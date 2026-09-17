@@ -144,7 +144,7 @@ function buildMonthlyInflowMap(rows: TransactionRow[]): Map<string, number> {
   return map;
 }
 
-function inflowStats(rows: TransactionRow[]) {
+function inflowStats(rows: TransactionRow[], monthlyInflows: number[]) {
   const inflows = rows
     .filter((r) => r.type === "Inflow")
     .map((r) => ({ date: new Date(r.date), amount: r.amount }))
@@ -159,13 +159,25 @@ function inflowStats(rows: TransactionRow[]) {
     gaps.push((dates[i].getTime() - dates[i - 1].getTime()) / (1000 * 60 * 60 * 24));
   }
 
-  const mean         = amounts.length ? amounts.reduce((a, b) => a + b, 0) / amounts.length : 0;
-  const cv           = mean > 0 && amounts.length > 1 ? stddev(amounts) / mean : null;
+  // Income Consistency CV uses the same monthly inflow observation series as
+  // Volatility Intelligence. Transaction-level amounts remain below for
+  // spike detection, which intentionally uses individual transactions.
+  const monthlyMean = monthlyInflows.length
+    ? monthlyInflows.reduce((a, b) => a + b, 0) / monthlyInflows.length
+    : 0;
+  const cv = monthlyMean > 0 && monthlyInflows.length > 1
+    ? stddev(monthlyInflows) / monthlyMean
+    : null;
   const maxGapDays   = gaps.length ? Math.max(...gaps) : null;
   const longGapCount = gaps.filter((g) => g > MAX_INFLOW_GAP_DAYS).length;
-  const spikeCount   = mean > 0 ? amounts.filter((a) => a / mean >= SPIKE_RATIO).length : 0;
+  const transactionMean = amounts.length
+    ? amounts.reduce((a, b) => a + b, 0) / amounts.length
+    : 0;
+  const spikeCount = transactionMean > 0
+    ? amounts.filter((a) => a / transactionMean >= SPIKE_RATIO).length
+    : 0;
 
-  return { mean, cv, maxGapDays, longGapCount, spikeCount };
+  return { cv, maxGapDays, longGapCount, spikeCount };
 }
 
 function normalizeCashflow(netRatio: number): number {
@@ -1036,7 +1048,10 @@ export function computeScorecard(
   // ── 3. Income Consistency ───────────────────────────────────────────────
   const monthMap   = buildMonthlyInflowMap(rows);
   const monthCount = monthMap.size;
-  const { cv, maxGapDays, longGapCount, spikeCount } = inflowStats(rows);
+  const monthlyInflows = Array.from(monthMap.values())
+    .map((inflow) => Math.round(inflow * 100) / 100);
+  const { cv, maxGapDays, longGapCount, spikeCount } =
+    inflowStats(rows, monthlyInflows);
 
   const irregularityFlags: string[] = [];
   let irregularityScore = 0;
