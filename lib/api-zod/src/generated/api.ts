@@ -429,14 +429,14 @@ export const GetAssessmentResponse = zod
                   "Coefficient of Variation expressed as a percentage (stdDev \/ mean \* 100)",
                 ),
               classification: zod
-                .enum(["LOW", "MODERATE", "HIGH"])
+                .enum(["LOW", "MODERATE", "ELEVATED", "HIGH", "SEVERE"])
                 .describe(
                   "Cashflow volatility classification based on coefficient of variation of monthly inflows",
                 ),
               scoreModifier: zod
                 .number()
                 .describe(
-                  "Score adjustment applied — 0 for LOW, -2 for MODERATE, -5 for HIGH",
+                  "Existing score adjustment applied by CV — 0 below 20%, -2 from 20% through 50%, -5 above 50%",
                 ),
               explanations: zod
                 .array(zod.string())

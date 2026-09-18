@@ -86,7 +86,7 @@ interface VolatilityIntelligenceData {
   meanMonthlyInflow: number;
   stdDev: number;
   cv: number;
-  classification: "LOW" | "MODERATE" | "HIGH";
+  classification: "LOW" | "MODERATE" | "ELEVATED" | "HIGH" | "SEVERE";
   scoreModifier: number;
   explanations: string[];
   isInsufficientHistory: boolean;
@@ -487,11 +487,15 @@ function ExpenseDependencySection({ ed }: { ed: ExpenseDependencyData }) {
 
 // ---------- Volatility Intelligence Section ----------
 
-function VolatilityBadge({ classification, isInsufficientHistory }: { classification?: "LOW" | "MODERATE" | "HIGH"; isInsufficientHistory?: boolean }) {
+function VolatilityBadge({ classification, isInsufficientHistory }: { classification?: "LOW" | "MODERATE" | "ELEVATED" | "HIGH" | "SEVERE"; isInsufficientHistory?: boolean }) {
   if (isInsufficientHistory)
     return <Badge className="bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-100 text-sm px-3 py-1"><Info className="h-4 w-4 mr-1.5" />Insufficient History</Badge>;
+  if (classification === "SEVERE")
+    return <Badge className="bg-red-100 text-red-900 border-red-300 hover:bg-red-100 text-sm px-3 py-1"><Activity className="h-4 w-4 mr-1.5" />SEVERE Volatility</Badge>;
   if (classification === "HIGH")
     return <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 text-sm px-3 py-1"><Activity className="h-4 w-4 mr-1.5" />HIGH Volatility</Badge>;
+  if (classification === "ELEVATED")
+    return <Badge className="bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-100 text-sm px-3 py-1"><Activity className="h-4 w-4 mr-1.5" />ELEVATED Volatility</Badge>;
   if (classification === "MODERATE")
     return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100 text-sm px-3 py-1"><Activity className="h-4 w-4 mr-1.5" />MODERATE Volatility</Badge>;
   return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100 text-sm px-3 py-1"><Activity className="h-4 w-4 mr-1.5" />LOW Volatility</Badge>;
@@ -502,7 +506,9 @@ function VolatilitySection({ vi }: { vi: VolatilityIntelligenceData }) {
 
   const bgBorder =
     insufficient              ? "bg-slate-50 border-slate-200" :
+    vi.classification === "SEVERE"   ? "bg-red-50 border-red-300" :
     vi.classification === "HIGH"     ? "bg-red-50 border-red-200" :
+    vi.classification === "ELEVATED" ? "bg-orange-50 border-orange-200" :
     vi.classification === "MODERATE" ? "bg-amber-50 border-amber-200" :
                                        "bg-emerald-50 border-emerald-200";
 
@@ -512,8 +518,8 @@ function VolatilitySection({ vi }: { vi: VolatilityIntelligenceData }) {
   }));
 
   const cvColor =
-    vi.cv > 50 ? "text-red-700" :
-    vi.cv > 20 ? "text-amber-700" :
+    vi.cv >= 50 ? "text-red-700" :
+    vi.cv >= 20 ? "text-amber-700" :
                   "text-emerald-700";
 
   return (
@@ -701,8 +707,12 @@ function generateCreditNarrative(
   // ── Derived risk/strength signals used for reconciliation throughout ─────
   const isMarginStrong      = margin ? margin.marginRatio >= 50 : cf.netRatio >= 0.5;
   const isMarginOk          = margin ? margin.marginRatio >= 25 : cf.netRatio >= 0.25;
+  const hasInsufficientHistory = !!(vi?.isInsufficientHistory) || cons.monthCount < 3;
+  const hasSevereVolatility = !!(vi && !vi.isInsufficientHistory && vi.classification === "SEVERE");
   const hasHighVolatility   = !!(vi && !vi.isInsufficientHistory && vi.classification === "HIGH");
+  const hasElevatedVolatility = !!(vi && !vi.isInsufficientHistory && vi.classification === "ELEVATED");
   const hasModVolatility    = !!(vi && !vi.isInsufficientHistory && vi.classification === "MODERATE");
+  const hasMaterialVolatility = hasElevatedVolatility || hasHighVolatility || hasSevereVolatility;
   const isConsistencyWeak   = typeof cons.normalizedScore === "number" && cons.normalizedScore < 45;
   const hasTrendPositive    = !!(ta && !ta.isInsufficientHistory && ta.classification === "POSITIVE");
   const hasTrendDeterior    = !!(ta && !ta.isInsufficientHistory && ta.classification === "NEGATIVE");
@@ -714,13 +724,19 @@ function generateCreditNarrative(
 
   if (isMarginStrong)  strengthFactors.push("strong operating cash generation");
   else if (isMarginOk) strengthFactors.push("positive operating surplus");
-  if (!hasHighVolatility && !isConsistencyWeak) strengthFactors.push("stable and predictable revenue patterns");
+  if (!hasMaterialVolatility && !isConsistencyWeak && !hasInsufficientHistory) {
+    strengthFactors.push("stable and predictable revenue patterns");
+  }
   if (rc && rc.risk === "LOW")  strengthFactors.push("diversified revenue sources");
   if (ed && ed.risk === "LOW")  strengthFactors.push("a well-distributed expense structure");
   if (hasTrendPositive)         strengthFactors.push("an improving financial trajectory");
 
-  if (hasHighVolatility)
+  if (hasSevereVolatility)
+    riskFactors.push(`severe revenue volatility (CV: ${vi!.cv.toFixed(1)}%) materially limits repayment predictability`);
+  else if (hasHighVolatility)
     riskFactors.push(`high cashflow volatility (CV: ${vi!.cv.toFixed(1)}%) limits repayment predictability`);
+  else if (hasElevatedVolatility)
+    riskFactors.push(`elevated revenue volatility (CV: ${vi!.cv.toFixed(1)}%) limits repayment predictability`);
   else if (hasModVolatility)
     riskFactors.push("moderate cashflow volatility introduces uncertainty in consistent repayment capacity");
   if (isConsistencyWeak)
@@ -745,16 +761,20 @@ function generateCreditNarrative(
 
   let financialStrength: string;
   if (isMarginStrong) {
-    if (hasHighVolatility || isConsistencyWeak) {
+    if (hasHighVolatility || hasSevereVolatility || isConsistencyWeak || hasInsufficientHistory) {
       financialStrength = `The business currently generates strong operating cash surpluses, with ${cashDesc} indicating healthy retention of revenue after expenses. This reflects sound operational management and confirms that the business is profitable on a current basis. However, operational profitability and repayment reliability are distinct credit considerations. Strong margins confirm the business can generate surplus, but they do not in themselves guarantee that this surplus will be generated consistently and predictably over the term of a debt obligation.`;
+    } else if (hasElevatedVolatility) {
+      financialStrength = `The business demonstrates strong operational financial performance, with ${cashDesc} reflecting robust cash generation relative to total inflows. Margins are healthy and indicate the business retains a significant share of its revenue after meeting expenses. Elevated variation in monthly revenue limits confidence that this surplus will remain consistent throughout a lending period.`;
     } else if (hasModVolatility) {
       financialStrength = `The business demonstrates strong operational financial performance, with ${cashDesc} reflecting robust cash generation relative to total inflows. Margins are healthy and indicate the business retains a significant share of its revenue after meeting expenses. Some moderate variation in monthly cashflow is noted, but this does not materially detract from the overall strength of the financial position.`;
     } else {
       financialStrength = `The business demonstrates strong operational financial performance, with ${cashDesc} reflecting robust cash generation relative to total inflows. The level of surplus indicates healthy operational efficiency and supports confidence in the business's capacity to service debt obligations from ongoing cash generation.`;
     }
   } else if (isMarginOk) {
-    if (hasHighVolatility || isConsistencyWeak) {
+    if (hasHighVolatility || hasSevereVolatility || isConsistencyWeak || hasInsufficientHistory) {
       financialStrength = `The business maintains a positive operating surplus, with ${cashDesc} indicating satisfactory cash generation. While operations are currently profitable, the financial headroom is moderate. Combined with the revenue variability identified elsewhere in this assessment, the current margin level provides a limited buffer against fluctuations in revenue or unforeseen cost pressures that could affect debt serviceability.`;
+    } else if (hasElevatedVolatility) {
+      financialStrength = `The business maintains a positive operating surplus, with ${cashDesc} indicating satisfactory cash generation. Current profitability is positive, but elevated variation in monthly revenue limits the certainty of future debt serviceability.`;
     } else {
       financialStrength = `The business maintains a positive operating surplus, with ${cashDesc} indicating satisfactory cash generation. Margins are adequate and suggest the business is financially sustainable under current operating conditions, though the available headroom may reduce flexibility during periods of stress.`;
     }
@@ -768,8 +788,10 @@ function generateCreditNarrative(
     revenueQuality = "Revenue concentration analysis is not available for this assessment.";
   } else if (rc.risk === "LOW") {
     const diverseNote = `Revenue sources appear reasonably diversified across ${rc.inflowCount} distinct inflow sources, with the largest single source representing ${rc.largestInflowPct.toFixed(1)}% of total receipts, presenting no material concentration risk.`;
-    revenueQuality = hasHighVolatility
+    revenueQuality = hasMaterialVolatility
       ? `${diverseNote} However, diversification of inflow sources does not eliminate repayment risk where the volume of those inflows fluctuates significantly between periods. The combination of diverse but volatile revenue streams still creates uncertainty for consistent debt servicing.`
+      : hasInsufficientHistory
+      ? `${diverseNote} The available history is insufficient to establish stable or predictable revenue behaviour over a lending period.`
       : `${diverseNote} This distribution does not create material exposure to the loss of any single revenue source, which supports confidence in the stability of the business's income base.`;
   } else if (rc.risk === "MODERATE") {
     revenueQuality = `Revenue concentration risk is present and warrants monitoring. The largest single inflow source represents ${rc.largestInflowPct.toFixed(1)}% of total receipts${rc.top3Pct ? `, with the top three sources accounting for ${rc.top3Pct.toFixed(1)}%` : ""}. This level of dependency introduces counterparty and client concentration risk — a material reduction in activity from the dominant revenue source could directly affect cashflow available for debt servicing.`;
@@ -796,20 +818,21 @@ function generateCreditNarrative(
 
   let stability: string;
   if (!vi || vi.isInsufficientHistory) {
-    stability = cons.monthCount < 2
-      ? "Revenue stability and volatility analysis could not be completed due to insufficient transaction history. A minimum of two months of data is required to assess cashflow patterns. This limitation reduces confidence in forward-looking repayment assessments."
-      : "Cashflow volatility analysis could not be completed due to insufficient monthly history. Income consistency has been evaluated from available data, but the findings should be interpreted with caution given the limited assessment window.";
+    stability = "Revenue stability and volatility analysis could not be established because fewer than three months contain inflow activity. Current cashflow performance may be positive, but the limited history does not support a conclusion about predictable revenue over a lending period.";
   } else if (vi.classification === "LOW") {
     stability = `Revenue patterns are stable and predictable, with cashflow volatility measured at a low coefficient of variation of ${vi.cv.toFixed(1)}%. Consistent monthly revenue generation is a positive indicator for repayment predictability, as it reduces the risk of cashflow shortfalls during the repayment period.${irregFlagsSummary ? ` Despite low statistical volatility, the following irregularities were identified in the inflow pattern: ${irregFlagsSummary}. These should be considered alongside the overall stability picture.` : ""}`;
   } else if (vi.classification === "MODERATE") {
     stability = `Monthly cashflow shows moderate variation, with a coefficient of variation of ${vi.cv.toFixed(1)}% indicating manageable but noticeable fluctuations in revenue. This level of variability does not preclude lending but warrants careful consideration of repayment structure. A conservative debt service coverage ratio may be appropriate to accommodate periods of lower-than-average cashflow.${irregFlagsSummary ? ` Additional income irregularities noted: ${irregFlagsSummary}.` : ""}`;
+  } else if (vi.classification === "ELEVATED") {
+    stability = `Monthly cashflow shows elevated variation, with a coefficient of variation of ${vi.cv.toFixed(1)}% indicating material fluctuations in revenue. This level of variability limits confidence in consistent repayment capacity and warrants careful review of the business's revenue drivers and repayment structure.${irregFlagsSummary ? ` Additional income irregularities noted: ${irregFlagsSummary}.` : ""}`;
   } else {
     const marginReconcile = isMarginStrong
       ? " It is important to distinguish between current profitability and future repayment reliability: strong current margins indicate the business can generate surplus today, but high cashflow volatility means this level of surplus cannot be relied upon consistently over a lending period."
       : isMarginOk
         ? " This volatility, combined with moderate margins, reduces confidence in the business's ability to maintain consistent repayment throughout a lending period."
         : " This high volatility, alongside constrained margins, presents a compounding credit risk — both the level and consistency of surplus cashflow are uncertain.";
-    stability = `Revenue patterns are highly unpredictable, with a coefficient of variation of ${vi.cv.toFixed(1)}% indicating significant month-to-month fluctuation in inflows. This level of volatility limits confidence in the business's ability to generate consistent cashflow for debt repayment.${marginReconcile}${irregFlagsSummary ? ` The following income irregularities were also identified: ${irregFlagsSummary}.` : ""}`;
+    const severity = vi.classification === "SEVERE" ? "severely unpredictable" : "highly unpredictable";
+    stability = `Revenue patterns are ${severity}, with a coefficient of variation of ${vi.cv.toFixed(1)}% indicating significant month-to-month fluctuation in inflows. This level of volatility limits confidence in the business's ability to generate consistent cashflow for debt repayment.${marginReconcile}${irregFlagsSummary ? ` The following income irregularities were also identified: ${irregFlagsSummary}.` : ""}`;
   }
 
   // ── Section: Trend ───────────────────────────────────────────────────────
@@ -818,8 +841,8 @@ function generateCreditNarrative(
     trend = "Trend analysis could not be completed due to insufficient historical data. At least two months of inflow activity are required to assess the directional trajectory of the business. The absence of trend data limits forward-looking assessment confidence.";
   } else if (ta.classification === "POSITIVE") {
     const detail = ta.explanations[0] ?? "Revenue and cashflow indicators show a positive trajectory over the assessment period.";
-    const cautionNote = hasHighVolatility
-      ? " However, the positive trajectory should be interpreted in the context of high cashflow volatility identified elsewhere in this assessment. An improving average trend does not eliminate the risk of significant cashflow shortfalls in individual months, which could affect timely debt repayment."
+    const cautionNote = hasMaterialVolatility
+      ? " However, the positive trajectory should be interpreted in the context of material cashflow volatility identified elsewhere in this assessment. An improving average trend does not eliminate the risk of significant cashflow shortfalls in individual months, which could affect timely debt repayment."
       : "";
     trend = `${detail} An improving financial trajectory is a positive forward-looking indicator, suggesting the business is strengthening its operating position and may have increasing capacity to service debt obligations.${cautionNote}`;
   } else if (ta.classification === "STABLE") {
@@ -886,7 +909,9 @@ function generateCreditNarrative(
   }
 
   const primaryRisksExec: string[] = [];
-  if (hasHighVolatility) primaryRisksExec.push(`elevated revenue volatility (CV: ${vi!.cv.toFixed(1)}%)`);
+  if (hasSevereVolatility) primaryRisksExec.push(`severe revenue volatility (CV: ${vi!.cv.toFixed(1)}%)`);
+  else if (hasHighVolatility) primaryRisksExec.push(`high revenue volatility (CV: ${vi!.cv.toFixed(1)}%)`);
+  else if (hasElevatedVolatility) primaryRisksExec.push(`elevated revenue volatility (CV: ${vi!.cv.toFixed(1)}%)`);
   else if (hasModVolatility) primaryRisksExec.push("moderate revenue volatility");
   if (isConsistencyWeak || (cons.irregularityFlags && cons.irregularityFlags.length > 0))
     primaryRisksExec.push("irregular income patterns");
@@ -986,7 +1011,7 @@ function generateCreditNarrative(
   const manualReviewAreas: ReviewArea[] = [];
 
   if (showReviewSection) {
-    if (hasHighVolatility || hasModVolatility) {
+    if (hasMaterialVolatility || hasModVolatility) {
       manualReviewAreas.push({
         title: "Revenue Volatility",
         items: [
@@ -994,7 +1019,7 @@ function generateCreditNarrative(
           "Request at least 12 months of bank statements to assess the full revenue cycle and identify any seasonal patterns.",
           "Obtain management commentary on the key drivers of month-to-month revenue variation.",
           "Request future revenue projections and the assumptions underpinning them.",
-          ...(hasHighVolatility ? ["Consider whether a variable repayment structure aligned to cashflow cycles would be more appropriate than a fixed monthly instalment."] : []),
+          ...(hasHighVolatility || hasSevereVolatility ? ["Consider whether a variable repayment structure aligned to cashflow cycles would be more appropriate than a fixed monthly instalment."] : []),
         ],
       });
     }
@@ -1101,7 +1126,9 @@ function generateCreditNarrative(
   if (ed && ed.risk === "HIGH") opWeaknesses.push("elevated expense dependency");
 
   const creditRisksConclusion: string[] = [];
-  if (hasHighVolatility) creditRisksConclusion.push("elevated revenue volatility");
+  if (hasSevereVolatility) creditRisksConclusion.push("severe revenue volatility");
+  else if (hasHighVolatility) creditRisksConclusion.push("high revenue volatility");
+  else if (hasElevatedVolatility) creditRisksConclusion.push("elevated revenue volatility");
   else if (hasModVolatility) creditRisksConclusion.push("moderate cashflow volatility");
   if (isConsistencyWeak) creditRisksConclusion.push("irregular income patterns");
   if (hasTrendDeterior) creditRisksConclusion.push(`a${ta?.isSevereDeterioration ? " severe" : ""} deteriorating performance trend`);
@@ -1547,6 +1574,8 @@ function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
   const ed = sc.expenseDependency;
 
   const insufficient = !!ta?.isInsufficientHistory;
+  const insufficientAssessmentHistory =
+    sc.confidence === "LOW" || sc.consistency.monthCount < 3 || !!vi?.isInsufficientHistory;
 
   const positiveSignals: { label: string; detail: string }[] = [];
   const riskSignals:     { label: string; detail: string }[] = [];
@@ -1559,7 +1588,7 @@ function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
       detail: `Net cashflow ratio ${(sc.cashflowStrength.netRatio * 100).toFixed(1)}% — business retains a healthy surplus from operations.`,
     });
   }
-  if (sc.consistency.normalizedScore >= 65) {
+  if (!insufficientAssessmentHistory && sc.consistency.normalizedScore >= 65) {
     positiveSignals.push({
       label:  "Consistent Income",
       detail: "Regular and predictable inflow patterns detected across the assessment period.",
@@ -1607,10 +1636,20 @@ function AssessmentDiagnostics({ sc }: { sc: ScorecardData }) {
     });
   }
   // Volatility risk signals driven by VolatilityIntelligence (not trendAnalysis.volatility)
-  if (!vi?.isInsufficientHistory && vi?.classification === "HIGH") {
+  if (!vi?.isInsufficientHistory && vi?.classification === "SEVERE") {
+    riskSignals.push({
+      label:  "Severe Revenue Volatility",
+      detail: `Revenue is severely unpredictable and varies significantly between months (CV: ${vi.cv.toFixed(1)}%).`,
+    });
+  } else if (!vi?.isInsufficientHistory && vi?.classification === "HIGH") {
     riskSignals.push({
       label:  "High Revenue Volatility",
       detail: `Revenue is highly unpredictable and varies significantly between months (CV: ${vi.cv.toFixed(1)}%).`,
+    });
+  } else if (!vi?.isInsufficientHistory && vi?.classification === "ELEVATED") {
+    riskSignals.push({
+      label:  "Elevated Revenue Volatility",
+      detail: `Material fluctuations in monthly revenue detected (CV: ${vi.cv.toFixed(1)}%).`,
     });
   } else if (!vi?.isInsufficientHistory && vi?.classification === "MODERATE") {
     riskSignals.push({

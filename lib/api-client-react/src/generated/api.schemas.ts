@@ -432,7 +432,9 @@ export type VolatilityClassification =
 export const VolatilityClassification = {
   LOW: "LOW",
   MODERATE: "MODERATE",
+  ELEVATED: "ELEVATED",
   HIGH: "HIGH",
+  SEVERE: "SEVERE",
 } as const;
 
 export type VolatilityIntelligenceMonthlyInflowsItem = {
@@ -453,7 +455,7 @@ export interface VolatilityIntelligence {
   /** Coefficient of Variation expressed as a percentage (stdDev / mean * 100) */
   cv: number;
   classification: VolatilityClassification;
-  /** Score adjustment applied — 0 for LOW, -2 for MODERATE, -5 for HIGH */
+  /** Existing score adjustment applied by CV — 0 below 20%, -2 from 20% through 50%, -5 above 50% */
   scoreModifier: number;
   /** Human-readable insights about inflow stability */
   explanations: string[];

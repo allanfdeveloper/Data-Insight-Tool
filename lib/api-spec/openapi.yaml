@@ -1029,7 +1029,7 @@ components:
 
     VolatilityClassification:
       type: string
-      enum: [LOW, MODERATE, HIGH]
+      enum: [LOW, MODERATE, ELEVATED, HIGH, SEVERE]
       description: Cashflow volatility classification based on coefficient of variation of monthly inflows
 
     VolatilityIntelligence:
@@ -1062,7 +1062,7 @@ components:
           $ref: "#/components/schemas/VolatilityClassification"
         scoreModifier:
           type: number
-          description: Score adjustment applied — 0 for LOW, -2 for MODERATE, -5 for HIGH
+          description: Existing score adjustment applied by CV — 0 below 20%, -2 from 20% through 50%, -5 above 50%
         explanations:
           type: array
           items:

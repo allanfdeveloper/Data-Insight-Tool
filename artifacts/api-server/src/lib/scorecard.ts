@@ -11,9 +11,9 @@
  *   6. Revenue Concentration  — additive modifier: HIGH −4, MODERATE −2, LOW 0
  *
  * Confidence layer (data-sufficiency check, does not change verdict):
- *   HIGH   — meets both minMonths AND minTransactions
- *   MEDIUM — meets exactly one
- *   LOW    — meets neither
+ *   HIGH   — at least 3 months and 10 transactions
+ *   MEDIUM — at least 3 months and 5–9 transactions
+ *   LOW    — fewer than 3 months or fewer than 5 transactions
  *
  * Hard gates (override score entirely):
  *   1. Negative cashflow (outflows ≥ inflows) → FAIL
@@ -54,6 +54,9 @@ const MAX_INFLOW_GAP_DAYS     = 45;
 const SPIKE_RATIO             = 2.5;
 const HIGH_IRREGULARITY_CV    = 0.9;
 const MODERATE_IRREGULARITY_CV = 0.55;
+const CONFIDENCE_MIN_MONTHS   = 3;
+const CONFIDENCE_LOW_MIN_TRANSACTIONS  = 5;
+const CONFIDENCE_HIGH_MIN_TRANSACTIONS = 10;
 
 // ---------------------------------------------------------------------------
 // Trend intelligence constants
@@ -326,7 +329,7 @@ export interface ConfigSnapshot {
   consistencyWeight: number;
 }
 
-export type VolatilityClassification = "LOW" | "MODERATE" | "HIGH";
+export type VolatilityClassification = "LOW" | "MODERATE" | "ELEVATED" | "HIGH" | "SEVERE";
 
 export interface VolatilityIntelligence {
   /** Per-month inflow totals used for the CV calculation. */
@@ -735,8 +738,10 @@ function computeRevenueConcentration(rows: TransactionRow[], totalInflow: number
 // Volatility Intelligence computation
 // ---------------------------------------------------------------------------
 
-const VOLATILITY_LOW_THRESHOLD:      number = 20;  // CV < 20% → LOW
-const VOLATILITY_MODERATE_THRESHOLD: number = 50;  // CV 20–50% → MODERATE, >50% → HIGH
+const VOLATILITY_LOW_THRESHOLD:      number = 10;  // CV < 10% → LOW
+const VOLATILITY_MODERATE_THRESHOLD: number = 20;  // CV 10–20% → MODERATE
+const VOLATILITY_ELEVATED_THRESHOLD: number = 50;  // CV 20–50% → ELEVATED
+const VOLATILITY_HIGH_THRESHOLD:     number = 90;  // CV 50–90% → HIGH, >90% → SEVERE
 const VOLATILITY_MODERATE_PENALTY:   number = 2;
 const VOLATILITY_HIGH_PENALTY:       number = 5;
 const VOLATILITY_MIN_MONTHS:         number = 3;   // minimum inflow months required
@@ -782,6 +787,14 @@ function computeVolatilityIntelligence(rows: TransactionRow[]): VolatilityIntell
   const stdDev   = Math.sqrt(variance);
   const cv       = mean > 0 ? (stdDev / mean) * 100 : 0;
   const cvRounded = Math.round(cv * 10) / 10;
+  // Preserve the established scoring modifiers while applying the corrected
+  // classification bands independently.
+  const scoreModifierForExistingBands =
+    cv < VOLATILITY_MODERATE_THRESHOLD
+      ? 0
+      : cv <= VOLATILITY_ELEVATED_THRESHOLD
+      ? -VOLATILITY_MODERATE_PENALTY
+      : -VOLATILITY_HIGH_PENALTY;
 
   let classification: VolatilityClassification;
   let scoreModifier: number;
@@ -792,16 +805,26 @@ function computeVolatilityIntelligence(rows: TransactionRow[]): VolatilityIntell
     scoreModifier  = 0;
     explanations.push("Monthly inflows remain relatively consistent.");
     explanations.push(`Revenue appears stable and predictable (CV: ${cvRounded}%).`);
-  } else if (cv <= VOLATILITY_MODERATE_THRESHOLD) {
+  } else if (cv < VOLATILITY_MODERATE_THRESHOLD) {
     classification = "MODERATE";
-    scoreModifier  = -VOLATILITY_MODERATE_PENALTY;
+    scoreModifier  = scoreModifierForExistingBands;
     explanations.push("Some month-to-month variation exists but remains manageable.");
-    explanations.push(`Some variation in revenue patterns detected (CV: ${cvRounded}%, −${VOLATILITY_MODERATE_PENALTY} pts).`);
-  } else {
+    explanations.push(`Some variation in revenue patterns detected (CV: ${cvRounded}%).`);
+  } else if (cv < VOLATILITY_ELEVATED_THRESHOLD) {
+    classification = "ELEVATED";
+    scoreModifier  = scoreModifierForExistingBands;
+    explanations.push("Elevated month-to-month variation creates additional revenue uncertainty.");
+    explanations.push(`Elevated variation in revenue patterns detected (CV: ${cvRounded}%, −${VOLATILITY_MODERATE_PENALTY} pts).`);
+  } else if (cv <= VOLATILITY_HIGH_THRESHOLD) {
     classification = "HIGH";
-    scoreModifier  = -VOLATILITY_HIGH_PENALTY;
+    scoreModifier  = scoreModifierForExistingBands;
     explanations.push("Large swings in monthly revenue create operational uncertainty.");
-    explanations.push(`Revenue fluctuates significantly from month to month (CV: ${cvRounded}%, −${VOLATILITY_HIGH_PENALTY} pts).`);
+    explanations.push(`Revenue fluctuates significantly from month to month (CV: ${cvRounded}%, ${scoreModifierForExistingBands} pts).`);
+  } else {
+    classification = "SEVERE";
+    scoreModifier  = scoreModifierForExistingBands;
+    explanations.push("Severe swings in monthly revenue create substantial operational uncertainty.");
+    explanations.push(`Revenue fluctuates extremely from month to month (CV: ${cvRounded}%, −${VOLATILITY_HIGH_PENALTY} pts).`);
   }
 
   return {
@@ -940,12 +963,11 @@ function computeGovernance(
   // Rule 3 — Severe Revenue Volatility
   if (
     !data.volatilityIntelligence.isInsufficientHistory &&
-    data.volatilityIntelligence.classification === "HIGH" &&
     data.volatilityIntelligence.cv >= SEVERE_VOLATILITY_CV_THRESHOLD
   ) {
     overrides.push({
       rule:             "Severe Revenue Volatility",
-      triggerCondition: `Volatility Classification = HIGH and Coefficient of Variation ≥ ${SEVERE_VOLATILITY_CV_THRESHOLD}% (actual: ${data.volatilityIntelligence.cv.toFixed(1)}%)`,
+      triggerCondition: `Coefficient of Variation ≥ ${SEVERE_VOLATILITY_CV_THRESHOLD}% (actual: ${data.volatilityIntelligence.cv.toFixed(1)}%)`,
       decisionImpact:   "PASS not allowed — maximum result capped to REVIEW",
       explanation:      `Revenue volatility exceeds acceptable lending thresholds (CV: ${data.volatilityIntelligence.cv.toFixed(1)}%). Result capped to REVIEW pending manual assessment.`,
     });
@@ -1146,29 +1168,34 @@ export function computeScorecard(
   // ── 7. Confidence layer ─────────────────────────────────────────────────
   const meetsMonths = monthCount >= minMonths;
   const meetsTxn    = transactionCount >= minTransactions;
+  const meetsConfidenceMonths = monthCount >= CONFIDENCE_MIN_MONTHS;
+  const meetsLowConfidenceTransactions =
+    transactionCount >= CONFIDENCE_LOW_MIN_TRANSACTIONS;
+  const meetsHighConfidenceTransactions =
+    transactionCount >= CONFIDENCE_HIGH_MIN_TRANSACTIONS;
 
   let confidence: AssessmentConfidence;
   const confidenceReasons: string[] = [];
 
-  if (meetsMonths && meetsTxn) {
-    confidence = "HIGH";
-  } else if (meetsMonths || meetsTxn) {
-    confidence = "MEDIUM";
-    if (!meetsMonths) {
-      confidenceReasons.push(
-        `Assessment confidence is MEDIUM due to limited monthly history (${monthCount} of ${minMonths} required months).`
-      );
-    }
-    if (!meetsTxn) {
-      confidenceReasons.push(
-        `Assessment confidence is MEDIUM due to limited transaction activity (${transactionCount} of ${minTransactions} required transactions).`
-      );
-    }
-  } else {
+  if (!meetsConfidenceMonths || !meetsLowConfidenceTransactions) {
     confidence = "LOW";
+    if (!meetsConfidenceMonths) {
+      confidenceReasons.push(
+        `Assessment confidence is LOW due to insufficient monthly history (${monthCount} of ${CONFIDENCE_MIN_MONTHS} required months).`
+      );
+    }
+    if (!meetsLowConfidenceTransactions) {
+      confidenceReasons.push(
+        `Assessment confidence is LOW due to insufficient transaction activity (${transactionCount} of ${CONFIDENCE_LOW_MIN_TRANSACTIONS} required transactions).`
+      );
+    }
+  } else if (!meetsHighConfidenceTransactions) {
+    confidence = "MEDIUM";
     confidenceReasons.push(
-      `Assessment confidence is LOW due to insufficient monthly history (${monthCount} of ${minMonths} required months) and insufficient transaction activity (${transactionCount} of ${minTransactions} required transactions).`
+      `Assessment confidence is MEDIUM due to limited transaction activity (${transactionCount} of ${CONFIDENCE_HIGH_MIN_TRANSACTIONS} required transactions).`
     );
+  } else {
+    confidence = "HIGH";
   }
 
   // ── 8. Triggered rules ──────────────────────────────────────────────────
@@ -1301,17 +1328,23 @@ export function computeScorecard(
 
   // Volatility Intelligence rules
   if (!volatilityIntelligence.isInsufficientHistory) {
-    if (volatilityIntelligence.classification === "HIGH") {
+    if (
+      volatilityIntelligence.classification === "HIGH" ||
+      volatilityIntelligence.classification === "SEVERE"
+    ) {
       triggeredRules.push({
         rule:        "VOLATILITY_HIGH",
         effect:      "score-penalty",
-        description: `High inflow volatility detected — revenue fluctuates significantly from month to month (-${VOLATILITY_HIGH_PENALTY} pts). CV: ${volatilityIntelligence.cv}%.`,
+        description: `${volatilityIntelligence.classification === "SEVERE" ? "Severe" : "High"} inflow volatility detected — revenue fluctuates significantly from month to month (-${VOLATILITY_HIGH_PENALTY} pts). CV: ${volatilityIntelligence.cv}%.`,
       });
-    } else if (volatilityIntelligence.classification === "MODERATE") {
+    } else if (
+      volatilityIntelligence.classification === "MODERATE" ||
+      volatilityIntelligence.classification === "ELEVATED"
+    ) {
       triggeredRules.push({
         rule:        "VOLATILITY_MODERATE",
         effect:      "score-penalty",
-        description: `Moderate inflow volatility detected — some variation in monthly revenue (-${VOLATILITY_MODERATE_PENALTY} pts). CV: ${volatilityIntelligence.cv}%.`,
+        description: `${volatilityIntelligence.classification === "ELEVATED" ? "Elevated" : "Moderate"} inflow volatility detected — some variation in monthly revenue (-${VOLATILITY_MODERATE_PENALTY} pts). CV: ${volatilityIntelligence.cv}%.`,
       });
     } else {
       triggeredRules.push({

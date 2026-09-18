@@ -23,9 +23,8 @@ Final score is clamped to [0, 100].
 - HIGH: -4
 
 ## Volatility Intelligence (volatilityIntelligence.scoreModifier)
-- LOW (CV < 20%): 0
-- MODERATE (CV 20–50%): -2
-- HIGH (CV > 50%): -5
+- Classification bands: LOW (<10%), MODERATE (10–<20%), ELEVATED (20–<50%), HIGH (50–90%), SEVERE (>90%).
+- Established score modifiers remain independent of the refined labels: CV <20%: 0; 20–50%: -2; >50%: -5.
 - Eligibility: requires ≥3 months with inflow activity; isInsufficientHistory=true → no penalty
 
 ## Expense Dependency (expenseDependency.scoreModifier)

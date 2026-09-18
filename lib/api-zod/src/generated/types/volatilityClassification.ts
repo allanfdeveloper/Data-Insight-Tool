@@ -15,5 +15,7 @@ export type VolatilityClassification =
 export const VolatilityClassification = {
   LOW: "LOW",
   MODERATE: "MODERATE",
+  ELEVATED: "ELEVATED",
   HIGH: "HIGH",
+  SEVERE: "SEVERE",
 } as const;
