@@ -364,17 +364,17 @@ function ConcentrationSection({ rc }: { rc: RevenueConcentrationData }) {
         {rc.inflowCount > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Largest Inflow</p>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Largest Source</p>
               <p className="text-base font-bold text-foreground">{formatCurrency(rc.largestInflow)}</p>
             </div>
             <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Largest Inflow %</p>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Largest Source %</p>
               <p className={`text-base font-bold ${rc.largestInflowPct > HIGH_CONCENTRATION_LARGEST_PCT ? "text-red-700" : rc.largestInflowPct >= MOD_CONCENTRATION_LARGEST_PCT ? "text-amber-700" : "text-green-700"}`}>
                 {rc.largestInflowPct.toFixed(1)}%
               </p>
             </div>
             <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Top 3 Inflows</p>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-0.5">Top 3 Sources</p>
               <p className="text-base font-bold text-foreground">{formatCurrency(rc.top3Inflow)}</p>
             </div>
             <div className="bg-white/60 rounded-lg px-3 py-2.5 border border-white">

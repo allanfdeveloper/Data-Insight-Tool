@@ -655,12 +655,30 @@ function computeMarginHealth(
 // ---------------------------------------------------------------------------
 
 function computeRevenueConcentration(rows: TransactionRow[], totalInflow: number): RevenueConcentration {
-  const inflowAmounts = rows
-    .filter((r) => r.type === "Inflow" && r.amount > 0)
-    .map((r) => r.amount)
-    .sort((a, b) => b - a);
+  const inflowBySource = new Map<string, number>();
+  const unlabelledInflowAmounts: number[] = [];
 
-  const inflowCount = inflowAmounts.length;
+  rows.forEach((row) => {
+    if (row.type !== "Inflow" || row.amount <= 0) return;
+
+    // Description is the only source/customer identity currently preserved by
+    // the parser. Normalize only whitespace and case; keep blank descriptions
+    // separate so unknown sources are never merged into an invented identity.
+    const normalizedDescription = row.description.trim().toLowerCase();
+    if (!normalizedDescription) {
+      unlabelledInflowAmounts.push(row.amount);
+      return;
+    }
+
+    inflowBySource.set(
+      normalizedDescription,
+      (inflowBySource.get(normalizedDescription) ?? 0) + row.amount,
+    );
+  });
+
+  const sourceAmounts = [...inflowBySource.values(), ...unlabelledInflowAmounts]
+    .sort((a, b) => b - a);
+  const inflowCount = sourceAmounts.length;
 
   if (inflowCount === 0 || totalInflow <= 0) {
     return {
@@ -675,10 +693,10 @@ function computeRevenueConcentration(rows: TransactionRow[], totalInflow: number
     };
   }
 
-  const largestInflow    = inflowAmounts[0];
+  const largestInflow    = sourceAmounts[0];
   const largestInflowPct = Math.round((largestInflow / totalInflow) * 10000) / 100;
 
-  const top3Amount = inflowAmounts.slice(0, 3).reduce((a, b) => a + b, 0);
+  const top3Amount = sourceAmounts.slice(0, 3).reduce((a, b) => a + b, 0);
   const top3Pct    = Math.round((top3Amount / totalInflow) * 10000) / 100;
 
   let risk: ConcentrationRisk;
@@ -691,12 +709,12 @@ function computeRevenueConcentration(rows: TransactionRow[], totalInflow: number
     observations.push("Business appears highly dependent on a small number of inflows.");
     if (largestInflowPct > HIGH_CONCENTRATION_LARGEST_PCT) {
       observations.push(
-        `Largest single inflow represents ${largestInflowPct.toFixed(1)}% of total revenue — significant single-source dependency detected.`
+        `Largest revenue source represents ${largestInflowPct.toFixed(1)}% of total revenue — significant single-source dependency detected.`
       );
     }
     if (top3Pct > HIGH_CONCENTRATION_TOP3_PCT) {
       observations.push(
-        `Top 3 inflows account for ${top3Pct.toFixed(1)}% of total revenue — highly concentrated revenue base.`
+        `Top 3 revenue sources account for ${top3Pct.toFixed(1)}% of total revenue — highly concentrated revenue base.`
       );
     }
   } else if (largestInflowPct >= MOD_CONCENTRATION_LARGEST_PCT || top3Pct >= MOD_CONCENTRATION_TOP3_PCT) {
@@ -705,12 +723,12 @@ function computeRevenueConcentration(rows: TransactionRow[], totalInflow: number
     observations.push("Moderate dependence on a small number of inflows detected.");
     if (largestInflowPct >= MOD_CONCENTRATION_LARGEST_PCT) {
       observations.push(
-        `Largest single inflow accounts for ${largestInflowPct.toFixed(1)}% of total revenue — monitor for single-customer risk.`
+        `Largest revenue source accounts for ${largestInflowPct.toFixed(1)}% of total revenue — monitor for single-customer risk.`
       );
     }
     if (top3Pct >= MOD_CONCENTRATION_TOP3_PCT) {
       observations.push(
-        `Top 3 inflows represent ${top3Pct.toFixed(1)}% of total revenue — moderate revenue concentration.`
+        `Top 3 revenue sources represent ${top3Pct.toFixed(1)}% of total revenue — moderate revenue concentration.`
       );
     }
   } else {
@@ -718,7 +736,7 @@ function computeRevenueConcentration(rows: TransactionRow[], totalInflow: number
     scoreModifier = 0;
     observations.push("Revenue sources appear reasonably diversified.");
     observations.push(
-      `Largest single inflow represents ${largestInflowPct.toFixed(1)}% of total revenue — within acceptable concentration limits.`
+      `Largest revenue source represents ${largestInflowPct.toFixed(1)}% of total revenue — within acceptable concentration limits.`
     );
   }
 
